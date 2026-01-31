@@ -1,6 +1,6 @@
 import React from "react";
 import { cn, formatTimeShort } from "@/lib/utils";
-import { Sparkles, Search } from "lucide-react";
+import { Music } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 
 const getLayoutDimensions = (layout: string = "16:9") => {
@@ -31,6 +31,31 @@ const getAssetUrl = (url?: string) => {
   return `http://localhost:3001${url.startsWith("/") ? "" : "/"}${url}`;
 };
 
+const getMediaDuration = (
+  url: string,
+  type: "video" | "audio",
+): Promise<number> => {
+  return new Promise((resolve) => {
+    const media = document.createElement(type);
+    media.crossOrigin = "anonymous";
+    media.src = url;
+
+    const timeout = setTimeout(() => {
+      resolve(5); // Fallback to 5s if metadata takes too long
+    }, 2000);
+
+    media.onloadedmetadata = () => {
+      clearTimeout(timeout);
+      resolve(media.duration || 5);
+    };
+
+    media.onerror = () => {
+      clearTimeout(timeout);
+      resolve(5);
+    };
+  });
+};
+
 export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
   const {
     pages,
@@ -46,6 +71,10 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
     redo,
     deleteElement,
   } = useEditorStore();
+
+  const [editingElementId, setEditingElementId] = React.useState<string | null>(
+    null,
+  );
 
   const currentPage = React.useMemo(
     () => pages.find((p) => p.id === currentPageId),
@@ -63,6 +92,15 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
   // Filter elements that should be visible at the current playhead
   const elements = allElements.filter(
     (el) =>
+      el.type !== "audio" && // Hide audio from visual canvas
+      timelinePosition >= el.startTime &&
+      timelinePosition <= el.startTime + el.duration,
+  );
+
+  // Hidden audio elements for playback
+  const audioElements = allElements.filter(
+    (el) =>
+      el.type === "audio" &&
       timelinePosition >= el.startTime &&
       timelinePosition <= el.startTime + el.duration,
   );
@@ -139,9 +177,9 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isInput = ["INPUT", "TEXTAREA"].includes(
-        (e.target as HTMLElement).tagName,
-      );
+      const isInput =
+        ["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName) ||
+        (e.target as HTMLElement).isContentEditable;
       if (isInput) return;
 
       const { undo, redo, deleteElement, selectedElementId, currentPageId } =
@@ -155,6 +193,20 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
       ) {
         e.preventDefault();
         deleteElement(currentPageId, selectedElementId);
+      }
+
+      // Copy: Ctrl+C or Cmd+C
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        if (selectedElementId) {
+          e.preventDefault();
+          copyElement(selectedElementId);
+        }
+      }
+
+      // Paste: Ctrl+V or Cmd+V
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        pasteElement();
       }
 
       // Undo: Ctrl+Z or Cmd+Z
@@ -176,8 +228,63 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo, deleteElement, currentPageId, selectedElementId]);
 
-  // Helper to draw elements to canvas (for export recording)
+  const AudioPlayer = React.memo(
+    ({
+      element,
+      timelinePosition,
+      isPlaying,
+    }: {
+      element: any;
+      timelinePosition: number;
+      isPlaying: boolean;
+    }) => {
+      const audioRef = React.useRef<HTMLAudioElement>(null);
+      const lastPosRef = React.useRef(0);
+
+      React.useEffect(() => {
+        const el = audioRef.current;
+        if (!el) return;
+
+        const offset = timelinePosition - element.startTime;
+        const diff = Math.abs(el.currentTime - offset);
+
+        // RELAXED SYNC STRATEGY:
+        // Only seek if non-playing (scrubbing) or if drift is significant (> 1.2s)
+        // This stops the lag/stutter caused by fighting the high-speed UI clock
+        if (!isPlaying || diff > 1.2) {
+          el.currentTime = offset;
+        }
+
+        if (isPlaying) {
+          if (el.paused || el.ended) {
+            el.play().catch(() => {});
+          }
+        } else if (!el.paused) {
+          el.pause();
+        }
+
+        el.volume = (element.volume ?? 100) / 100;
+      }, [timelinePosition, isPlaying, element.startTime, element.volume]);
+
+      return (
+        <audio
+          ref={audioRef}
+          src={getAssetUrl(element.src)}
+          crossOrigin="anonymous"
+          autoPlay={isPlaying}
+        />
+      );
+    },
+  );
+
+  // Helper to draw elements to canvas (ONLY for export recording)
   React.useEffect(() => {
+    // ABORT if we are not in export mode to save CPU
+    // We can check if ExportModal is NOT open by checking a specific data attribute
+    // or just assume if it's visible (opacity 0) we don't need to redraw constantly
+    const isExporting = document.querySelector('[role="dialog"]') !== null;
+    if (!isExporting) return;
+
     const canvas = document.getElementById(
       "editor-canvas",
     ) as HTMLCanvasElement;
@@ -195,7 +302,7 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Filter elements visible at current playhead
@@ -254,7 +361,7 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
     });
   }, [timelinePosition, allElements, currentPage?.layout]);
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     try {
       const data = e.dataTransfer.getData("application/json");
@@ -267,10 +374,17 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
 
       const scale = zoom / 100;
       const rect = e.currentTarget.getBoundingClientRect();
-      // Adjust for scale: the coordinates inside the transformed element
-      // need to be mapped back to the 1:1 coordinate space.
       const x = (e.clientX - rect.left) / scale;
       const y = (e.clientY - rect.top) / scale;
+
+      const assetSrc = getAssetUrl(asset.url || asset.src);
+      let duration = 5;
+
+      if (asset.type === "video" || asset.type === "audio") {
+        duration = await getMediaDuration(assetSrc, asset.type);
+      } else if (asset.type === "image") {
+        duration = 10; // Default images to 10s
+      }
 
       const newElement: any = {
         id: `el-${Date.now()}`,
@@ -278,8 +392,8 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
         name: asset.name || asset.label,
         position: { x: x - 100, y: y - 75 },
         size: { width: 200, height: 150 },
-        duration: 5,
-        startTime: timelinePosition, // Add at current playhead
+        duration,
+        startTime: timelinePosition,
         freePosition: true,
         opacity: 100,
         layer: Date.now(),
@@ -288,6 +402,7 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
       if (asset.type === "image") {
         newElement.src = asset.url || asset.src;
         newElement.fill = "fill";
+        newElement.size = { width: 400, height: 300 };
       } else if (asset.type === "video") {
         newElement.src = asset.url || asset.src;
         newElement.thumbnail = asset.thumbnail;
@@ -306,6 +421,11 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
         newElement.color = asset.color || "#ffffff";
         newElement.backgroundColor = asset.backgroundColor || "transparent";
         newElement.size = { width: 300, height: 60 };
+      } else if (asset.type === "audio") {
+        newElement.type = "audio";
+        newElement.src = asset.url || asset.src;
+        newElement.volume = 100;
+        newElement.size = { width: 150, height: 60 };
       }
 
       useEditorStore.getState().addElement(currentPageId, newElement);
@@ -331,8 +451,9 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
           height: `${TOTAL_HEIGHT}px`,
           transform: `scale(${zoom / 100})`,
           transformOrigin: "center center",
+          flexShrink: 0,
         }}
-        className="relative shadow-2xl bg-black border border-border/50 rounded-sm overflow-hidden group transition-all duration-300"
+        className="relative shadow-2xl bg-white border border-border/50 rounded-sm overflow-hidden group transition-all duration-300"
       >
         {/* Hidden Canvas for Recording (DO NOT REMOVE) */}
         <canvas
@@ -341,6 +462,27 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
           height={TOTAL_HEIGHT}
           className="absolute inset-0 w-full h-full pointer-events-none opacity-0"
         />
+
+        {/* Hidden Audio Playback */}
+        <div
+          style={{
+            position: "absolute",
+            opacity: 0,
+            pointerEvents: "none",
+            width: 0,
+            height: 0,
+          }}
+          aria-hidden="true"
+        >
+          {audioElements.map((element) => (
+            <AudioPlayer
+              key={element.id}
+              element={element}
+              timelinePosition={timelinePosition}
+              isPlaying={isPlaying}
+            />
+          ))}
+        </div>
         {elements.length === 0 ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-4">
             <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border border-white/10 shadow-inner">
@@ -365,9 +507,15 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
                   key={element.id}
                   data-element-id={element.id}
                   onMouseDown={(e) => handleMouseDown(e, element, "move")}
+                  onDoubleClick={() => {
+                    if (element.type === "text") {
+                      setEditingElementId(element.id);
+                    }
+                  }}
                   className={cn(
                     "absolute select-none group/el",
-                    isSelected && "ring-[3px] ring-white z-50",
+                    isSelected &&
+                      "ring-[3px] ring-accent z-50 shadow-[0_0_15px_rgba(59,130,246,0.5)]",
                   )}
                   style={{
                     left: `${element.position.x}px`,
@@ -381,6 +529,7 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
                     <img
                       src={getAssetUrl(element.src)}
                       alt={element.name}
+                      crossOrigin="anonymous"
                       className="w-full h-full object-cover"
                       style={{
                         backgroundColor: (element as any).backgroundColor,
@@ -400,6 +549,7 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
                     >
                       <video
                         src={getAssetUrl(element.src)}
+                        crossOrigin="anonymous"
                         className="w-full h-full object-cover"
                         ref={(el) => {
                           if (el) {
@@ -418,25 +568,24 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
                     </div>
                   )}
 
-                  {element.type === "audio" && isPlaying && (
-                    <audio
-                      src={(element as any).src}
-                      ref={(el) => {
-                        if (el) {
-                          const offset = timelinePosition - element.startTime;
-                          if (Math.abs(el.currentTime - offset) > 0.1) {
-                            el.currentTime = offset;
-                          }
-                          el.play().catch(() => {});
-                        }
-                      }}
-                      autoPlay
-                    />
+                  {element.type === "audio" && (
+                    <div
+                      className="w-full h-full bg-cyan-500/10 border border-cyan-500/30 rounded-xl flex items-center justify-center gap-2 px-3"
+                      style={{ opacity: (element.opacity || 100) / 100 }}
+                    >
+                      <Music
+                        size={16}
+                        className="text-cyan-400 group-hover/el:scale-110 transition-transform"
+                      />
+                      <span className="text-[10px] font-bold text-cyan-400 truncate uppercase tracking-tighter">
+                        {element.name || "Audio Block"}
+                      </span>
+                    </div>
                   )}
 
                   {element.type === "text" && (
                     <div
-                      className="w-full h-full pointer-events-none flex items-center justify-center break-words px-2 text-center"
+                      className="w-full h-full flex items-center justify-center break-words px-2 text-center"
                       style={{
                         fontSize: `${(element as any).fontSize}px`,
                         fontWeight: (element as any).fontWeight,
@@ -447,9 +596,36 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
                         textAlign: (element as any).textAlign || "center",
                         lineHeight: 1.2,
                         borderRadius: (element as any).borderRadius || "0px",
+                        pointerEvents:
+                          editingElementId === element.id ? "all" : "none",
                       }}
                     >
-                      {(element as any).content}
+                      {editingElementId === element.id ? (
+                        <textarea
+                          autoFocus
+                          defaultValue={(element as any).content}
+                          onBlur={(e) => {
+                            updateElement(currentPageId!, element.id, {
+                              content: e.target.value,
+                            });
+                            setEditingElementId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              (e.target as HTMLTextAreaElement).blur();
+                            }
+                          }}
+                          className="w-full h-full bg-transparent border-none outline-none resize-none text-center p-0 font-inherit"
+                          style={{
+                            color: "inherit",
+                            fontSize: "inherit",
+                            fontWeight: "inherit",
+                          }}
+                        />
+                      ) : (
+                        (element as any).content
+                      )}
                     </div>
                   )}
 
@@ -465,20 +641,13 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2.5"
+                        strokeWidth="2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className="w-full h-full"
                       >
                         {(element as any).shapeType === "Square" && (
-                          <rect
-                            x="3"
-                            y="3"
-                            width="18"
-                            height="18"
-                            rx="2"
-                            ry="2"
-                          />
+                          <rect width="18" height="18" x="3" y="3" rx="2" />
                         )}
                         {(element as any).shapeType === "Circle" && (
                           <circle cx="12" cy="12" r="10" />
@@ -487,27 +656,27 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
                           <path d="M3 20h18L12 4z" />
                         )}
                         {(element as any).shapeType === "Star" && (
-                          <path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                         )}
                         {(element as any).shapeType === "Heart" && (
                           <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
                         )}
                         {(element as any).shapeType === "Rocket" && (
-                          <path d="M4.5 16.5c-1.5 1.26-2 2.67-2 4.5 0 0 0 0 0 0s0 0 0 0c1.83 0 3.24-.5 4.5-2L4.5 16.5Z M12 15-3-3 m1.31-7.11A18.004 18.004 0 0 1 21 3a18.004 18.004 0 0 1-2.11 10.69 M14.23 21a18.004 18.004 0 0 1-10.69 2.11 A18.004 18.004 0 0 1 3 12.42" />
+                          <path d="M4.5 16.5c-1.5 1.26-2 2.67-2 4.5 0 0 0 0 0 0s0 0 0 0c1.83 0 3.24-.5 4.5-2L4.5 16.5Z m10-15C18.5 2 21.5 5 22 9.5c0 2-1 5-4.5 8s-6.5 4.5-8.5 4.5-3-3.5-3-3.5 1-1 4-4.5 6-6.5 6-8.5Z" />
                         )}
                         {(element as any).shapeType === "Smile" && (
                           <>
                             <circle cx="12" cy="12" r="10" />
                             <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                            <line x1="9" y1="9" x2="9.01" y2="9" />
-                            <line x1="15" y1="9" x2="15.01" y2="9" />
+                            <line x1="9" x2="9.01" y1="9" y2="9" />
+                            <line x1="15" x2="15.01" y1="9" y2="9" />
                           </>
                         )}
                         {(element as any).shapeType === "Zap" && (
                           <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
                         )}
                         {(element as any).shapeType === "Sparkle" && (
-                          <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                          <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0L9.937 15.5Z" />
                         )}
                       </svg>
                     </div>
@@ -553,7 +722,7 @@ export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
           <span>{currentPage?.layout || "16:9"}</span>
           <span className="text-[10px] opacity-30">|</span>
           <span>
-            {TOTAL_WIDTH}x{TOTAL_HEIGHT}
+            {TOTAL_WIDTH}X{TOTAL_HEIGHT}
           </span>
         </div>
       </div>

@@ -15,6 +15,7 @@ import {
   Layers,
   Image as ImageIcon,
   Video,
+  Music,
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
   } = useEditorStore();
 
   const [loading, setLoading] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
 
   const testElements = [
     { id: "e1", type: "shape", name: "Square", icon: Square, color: "#3b82f6" },
@@ -144,16 +146,60 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
   }, [fetchResources]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await handleFilesUpload(Array.from(files));
+  };
 
+  const handleFilesUpload = async (files: File[]) => {
     try {
       setLoading(true);
-      await uploadAsset(file);
+      const uploadPromises = files.map((file) => uploadAsset(file));
+      await Promise.all(uploadPromises);
     } catch (error) {
-      console.error("Error uploading asset:", error);
+      console.error("Error uploading assets:", error);
     } finally {
       setLoading(false);
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (activeTab === "upload" || activeTab === "media") {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if we're actually leaving the component
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (
+      e.clientX <= rect.left ||
+      e.clientX >= rect.right ||
+      e.clientY <= rect.top ||
+      e.clientY >= rect.bottom
+    ) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      await handleFilesUpload(Array.from(files));
     }
   };
 
@@ -230,6 +276,9 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                       )}
                       {el.type === "video" && (
                         <Video size={14} className="text-white/60" />
+                      )}
+                      {el.type === "audio" && (
+                        <Music size={14} className="text-white/60" />
                       )}
                     </div>
                     <div className="flex flex-col min-w-0">
@@ -325,6 +374,16 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                     VIDEO
                   </div>
                 )}
+                {item.type === "audio" && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                    <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center mb-2 border border-cyan-500/20 shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+                      <Music size={24} className="text-cyan-400" />
+                    </div>
+                    <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">
+                      AUDIO
+                    </span>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors" />
               </div>
               <p className="mt-1.5 text-[10px] font-medium text-text-muted truncate px-1 group-hover:text-text-main transition-colors">
@@ -338,7 +397,25 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
   };
 
   return (
-    <div className="w-70 h-full bg-bg-app flex flex-col border-r border-border animate-in slide-in-from-left duration-500">
+    <div
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="w-70 h-full bg-bg-app flex flex-col border-r border-border animate-in slide-in-from-left duration-500 relative"
+    >
+      {/* Drag and Drop Overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-accent/10 backdrop-blur-[2px] border-2 border-dashed border-accent m-2 rounded-2xl flex flex-col items-center justify-center animate-in fade-in duration-200 pointer-events-none">
+          <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mb-4 border border-accent/30 shadow-[0_0_20px_rgba(34,211,238,0.2)]">
+            <Upload size={32} className="text-accent animate-bounce" />
+          </div>
+          <p className="text-sm font-bold text-text-main">Drop to Upload</p>
+          <p className="text-[11px] text-text-muted mt-1 font-medium">
+            Release to start syncing your assets
+          </p>
+        </div>
+      )}
       <div className="p-4 border-b border-border space-y-4 shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-text-main tracking-tight">

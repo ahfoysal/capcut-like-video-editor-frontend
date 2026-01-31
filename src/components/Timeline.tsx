@@ -108,6 +108,24 @@ export function Timeline({ className }: { className?: string }) {
     };
   }, [isScrubbing, setTimelinePosition, PX_PER_SEC]);
 
+  const tracksScrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to playhead during playback
+  React.useEffect(() => {
+    if (isPlaying && tracksScrollRef.current) {
+      const scrollEl = tracksScrollRef.current;
+      const playheadX = timelinePosition * PX_PER_SEC;
+      const viewWidth = scrollEl.clientWidth;
+      const currentScroll = scrollEl.scrollLeft;
+
+      if (playheadX > currentScroll + viewWidth - 100) {
+        scrollEl.scrollLeft = playheadX - viewWidth + 200;
+      } else if (playheadX < currentScroll) {
+        scrollEl.scrollLeft = Math.max(0, playheadX - 100);
+      }
+    }
+  }, [isPlaying, timelinePosition, PX_PER_SEC]);
+
   const [timelineDrag, setTimelineDrag] = React.useState<{
     id: string;
     type: "move" | "trim-left" | "trim-right";
@@ -142,6 +160,17 @@ export function Timeline({ className }: { className?: string }) {
           updateElement(currentPageId, timelineDrag.id, {
             startTime: newStart,
           });
+
+          // Auto-scroll when dragging near edges
+          if (tracksScrollRef.current) {
+            const scrollEl = tracksScrollRef.current;
+            const mouseX = e.clientX - scrollEl.getBoundingClientRect().left;
+            if (mouseX > scrollEl.clientWidth - 50) {
+              scrollEl.scrollLeft += 10;
+            } else if (mouseX < 50) {
+              scrollEl.scrollLeft -= 10;
+            }
+          }
         } else if (timelineDrag.type === "trim-left") {
           const newStart = Math.max(
             0,
@@ -180,20 +209,36 @@ export function Timeline({ className }: { className?: string }) {
   }, [timelineDrag, currentPageId, updateElement, PX_PER_SEC]);
 
   React.useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
-    if (isPlaying) {
-      interval = setInterval(() => {
+    let animationFrame: number;
+    let lastTime: number | null = null;
+
+    const animate = (time: number) => {
+      if (lastTime === null) {
+        lastTime = time;
+      }
+      const deltaTime = (time - lastTime) / 1000;
+      lastTime = time;
+
+      if (isPlaying) {
         setTimelinePosition((prev) => {
-          const next = prev + 0.1;
+          const next = prev + deltaTime;
           if (next >= totalDuration) {
-            if (isPlaying) togglePlay();
+            togglePlay();
             return totalDuration;
           }
           return next;
         });
-      }, 100);
+        animationFrame = requestAnimationFrame(animate);
+      }
+    };
+
+    if (isPlaying) {
+      animationFrame = requestAnimationFrame(animate);
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+    };
   }, [isPlaying, totalDuration, togglePlay, setTimelinePosition]);
 
   const formatTime = (seconds: number) => {
@@ -234,7 +279,12 @@ export function Timeline({ className }: { className?: string }) {
               <Minus size={14} />
             </button>
             <button
-              onClick={togglePlay}
+              onClick={() => {
+                if (!isPlaying && timelinePosition >= totalDuration - 0.01) {
+                  setTimelinePosition(0);
+                }
+                togglePlay();
+              }}
               className="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95 shadow-lg"
             >
               {isPlaying ? (
@@ -284,16 +334,20 @@ export function Timeline({ className }: { className?: string }) {
         </div>
       </div>
 
+      {/* Timeline Tracks Area */}
       <div
-        ref={containerRef}
-        className="flex-1 flex flex-col overflow-hidden relative bg-[#111114]"
+        ref={tracksScrollRef}
+        className="flex-1 overflow-x-auto overflow-y-auto no-scrollbar relative z-10 transition-all bg-[#111114]"
       >
-        {/* Time Ruler */}
+        {/* Timeline Ruler inside scrollable area to sync with tracks */}
         <div
-          className="h-8 border-b border-border bg-bg-panel flex items-center relative z-30 cursor-crosshair ml-30"
+          className="sticky top-0 h-8 border-b border-border bg-bg-panel flex items-center z-30 cursor-crosshair ml-30"
           onMouseDown={onRulerMouseDown}
         >
-          <div className="flex w-1250">
+          <div
+            className="flex"
+            style={{ width: Math.max(1250, (totalDuration + 10) * PX_PER_SEC) }}
+          >
             {Array.from({ length: Math.ceil(totalDuration) + 10 }).map(
               (_, i) => (
                 <div
@@ -310,110 +364,109 @@ export function Timeline({ className }: { className?: string }) {
           </div>
         </div>
 
-        {/* Tracks Area */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto no-scrollbar relative z-10 transition-all">
-          <div className="flex flex-col min-w-1250">
-            {tracks.map((track) => {
-              // Group items into non-overlapping rows
-              const sorted = [...track.items].sort(
-                (a, b) => a.startTime - b.startTime,
-              );
-              const rows: any[][] = [];
-              sorted.forEach((el) => {
-                let placed = false;
-                for (const row of rows) {
-                  const last = row[row.length - 1];
-                  const gap = 0.05; // small gap
-                  if (el.startTime >= last.startTime + last.duration + gap) {
-                    row.push(el);
-                    placed = true;
-                    break;
-                  }
-                }
-                if (!placed) {
-                  rows.push([el]);
-                }
-              });
-
-              // Ensure at least one row if track exists? No, just rows.
-              const rowCount = rows.length || 1;
-              const rowHeight = 40;
-              const totalHeight = rowCount * rowHeight + 12; // padding
-
-              return (
-                <div
-                  key={track.label}
-                  className="grid grid-cols-[120px_1fr] border-b border-border/10 group overflow-hidden"
-                  style={{ minHeight: totalHeight }}
-                >
-                  <div className="sticky left-0 bg-bg-panel z-20 px-4 flex items-center border-r border-border/20 text-[10px] font-bold text-text-muted uppercase tracking-wider group-hover:text-text-main transition-colors">
-                    {track.label}
-                  </div>
-                  <div className="relative h-full py-1.5 bg-black/5">
-                    {rows.map((row, rowIndex) => (
-                      <React.Fragment key={rowIndex}>
-                        {row.map((element) => (
-                          <div
-                            key={element.id}
-                            onMouseDown={(e) =>
-                              onSegmentMouseDown(e, element, "move")
-                            }
-                            className={cn(
-                              "absolute h-9 rounded-md border flex items-center px-3 cursor-move transition-shadow z-10",
-                              track.color,
-                              selectedElementId === element.id
-                                ? "ring-2 ring-white border-transparent z-20 shadow-2xl scale-[1.01]"
-                                : "border-white/10 hover:border-white/30",
-                            )}
-                            style={{
-                              left: element.startTime * PX_PER_SEC,
-                              width: element.duration * PX_PER_SEC,
-                              top: rowIndex * rowHeight + 6,
-                            }}
-                          >
-                            <span
-                              className={cn(
-                                "text-[11px] font-bold truncate",
-                                track.textColor,
-                              )}
-                            >
-                              {element.name || element.type}
-                            </span>
-
-                            {/* Trimming handles */}
-                            {selectedElementId === element.id && (
-                              <>
-                                <div
-                                  className="absolute left-0 top-0 bottom-0 w-2 hover:bg-white/50 bg-white/30 rounded-l-md cursor-ew-resize transition-colors"
-                                  onMouseDown={(e) =>
-                                    onSegmentMouseDown(e, element, "trim-left")
-                                  }
-                                />
-                                <div
-                                  className="absolute right-0 top-0 bottom-0 w-2 hover:bg-white/50 bg-white/30 rounded-r-md cursor-ew-resize transition-colors"
-                                  onMouseDown={(e) =>
-                                    onSegmentMouseDown(e, element, "trim-right")
-                                  }
-                                />
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Playhead */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none transition-none shadow-[0_0_8px_rgba(255,255,255,0.5)]"
-          style={{ left: HEADER_WIDTH + timelinePosition * PX_PER_SEC }}
+          className="flex flex-col relative"
+          style={{ width: Math.max(1250, (totalDuration + 10) * PX_PER_SEC) }}
         >
-          <div className="w-3 h-3 bg-white rounded-xs rotate-45 -translate-x-1/2 -mt-1.5 shadow-lg border border-black/20" />
+          {tracks.map((track) => {
+            const sorted = [...track.items].sort(
+              (a, b) => a.startTime - b.startTime,
+            );
+            const rows: any[][] = [];
+            sorted.forEach((el) => {
+              let placed = false;
+              for (const row of rows) {
+                const last = row[row.length - 1];
+                const gap = 0.05;
+                if (el.startTime >= last.startTime + last.duration + gap) {
+                  row.push(el);
+                  placed = true;
+                  break;
+                }
+              }
+              if (!placed) {
+                rows.push([el]);
+              }
+            });
+
+            const rowCount = rows.length || 1;
+            const rowHeight = 40;
+            const totalHeight = rowCount * rowHeight + 12;
+
+            return (
+              <div
+                key={track.label}
+                className="grid grid-cols-[120px_1fr] border-b border-border/10 group overflow-hidden"
+                style={{ minHeight: totalHeight }}
+              >
+                <div className="sticky left-0 bg-bg-panel z-20 px-4 flex items-center border-r border-border/20 text-[10px] font-bold text-text-muted uppercase tracking-wider group-hover:text-text-main transition-colors">
+                  {track.label}
+                </div>
+                <div className="relative h-full py-1.5 bg-black/5">
+                  {rows.map((row, rowIndex) => (
+                    <React.Fragment key={rowIndex}>
+                      {row.map((element) => (
+                        <div
+                          key={element.id}
+                          onMouseDown={(e) =>
+                            onSegmentMouseDown(e, element, "move")
+                          }
+                          className={cn(
+                            "absolute h-9 rounded-md border flex items-center px-3 cursor-move transition-shadow z-10",
+                            track.color,
+                            selectedElementId === element.id
+                              ? "ring-2 ring-white border-transparent z-20 shadow-2xl scale-[1.01]"
+                              : "border-white/10 hover:border-white/30",
+                          )}
+                          style={{
+                            left: element.startTime * PX_PER_SEC,
+                            width: element.duration * PX_PER_SEC,
+                            top: rowIndex * rowHeight + 6,
+                          }}
+                        >
+                          <span
+                            className={cn(
+                              "text-[11px] font-bold truncate",
+                              track.textColor,
+                            )}
+                          >
+                            {element.name || element.type}
+                          </span>
+                          {selectedElementId === element.id && (
+                            <>
+                              <div
+                                className="absolute left-0 top-0 bottom-0 w-2 hover:bg-white/50 bg-white/30 rounded-l-md cursor-ew-resize transition-colors"
+                                onMouseDown={(e) =>
+                                  onSegmentMouseDown(e, element, "trim-left")
+                                }
+                              />
+                              <div
+                                className="absolute right-0 top-0 bottom-0 w-2 hover:bg-white/50 bg-white/30 rounded-r-md cursor-ew-resize transition-colors"
+                                onMouseDown={(e) =>
+                                  onSegmentMouseDown(e, element, "trim-right")
+                                }
+                              />
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Playhead Layer */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none transition-none shadow-[0_0_8px_rgba(255,255,255,0.5)]"
+            style={{
+              left: 120 + timelinePosition * PX_PER_SEC,
+              height: "100%",
+            }}
+          >
+            <div className="w-3 h-3 bg-white rounded-xs rotate-45 -translate-x-1/2 -mt-1.5 shadow-lg border border-black/20" />
+          </div>
         </div>
       </div>
     </div>

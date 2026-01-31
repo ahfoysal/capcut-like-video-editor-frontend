@@ -36,7 +36,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         return;
       }
 
-      const stream = canvas.captureStream(30);
+      const stream = (canvas as any).captureStream(30);
       const options = { mimeType: "video/webm;codecs=vp9,opus" };
       if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options.mimeType = "video/webm";

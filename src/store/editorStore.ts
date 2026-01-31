@@ -7,6 +7,9 @@ export type ViewMode = "empty" | "template" | "editor";
 interface EditorState extends EditorStore {
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
+  clipboard: Element | null;
+  copyElement: (elementId: string) => void;
+  pasteElement: () => void;
 }
 
 // Sample resources and pages are now empty by default as requested.
@@ -44,6 +47,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saveStatus: "idle",
   history: [],
   future: [],
+  clipboard: null,
 
   // Project actions
   pushHistory: () => {
@@ -301,6 +305,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       resources: state.resources.filter((r) => r.id !== resourceId),
     }));
+  },
+
+  // Clipboard actions
+  copyElement: (elementId) => {
+    const { pages, currentPageId } = get();
+    const page = pages.find((p) => p.id === currentPageId);
+    const element = page?.elements.find((el) => el.id === elementId);
+    if (element) {
+      set({ clipboard: JSON.parse(JSON.stringify(element)) });
+    }
+  },
+
+  pasteElement: () => {
+    const { clipboard, currentPageId, addElement } = get();
+    if (clipboard && currentPageId) {
+      const pastedElement = {
+        ...JSON.parse(JSON.stringify(clipboard)),
+        id: generateId(),
+        position: {
+          x: clipboard.position.x + 20,
+          y: clipboard.position.y + 20,
+        },
+        startTime: get().timelinePosition,
+      };
+      addElement(currentPageId, pastedElement);
+    }
   },
 
   // Playback actions
