@@ -157,6 +157,18 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
     }
   };
 
+  const getAssetUrl = (item: any) => {
+    const url = item.url || item.src;
+    if (!url) return item.thumbnail || "";
+    if (
+      url.startsWith("http") ||
+      url.startsWith("data:") ||
+      url.startsWith("blob:")
+    )
+      return url;
+    return `http://localhost:3001${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
   const renderContent = () => {
     let items = [];
     let title = "Uploads";
@@ -172,9 +184,13 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
         items = testTextTemplates;
         title = "Text Templates";
         break;
+      case "upload":
+        items = resources;
+        title = "My Uploads";
+        break;
       case "media":
-        items = testMedia;
-        title = "Cloud Media";
+        items = resources;
+        title = "Media Library";
         break;
       case "layers":
         title = "Layers Management";
@@ -269,7 +285,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
           {title}
         </h3>
         <div className="grid grid-cols-2 gap-3">
-          {items.map((item: any) => (
+          {(Array.isArray(items) ? items : []).map((item: any) => (
             <div
               key={item.id}
               draggable
@@ -295,19 +311,13 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                   </div>
                 ) : (
                   <img
-                    src={
-                      item.url &&
-                      !item.url.startsWith("/") &&
-                      !item.url.startsWith("http")
-                        ? item.url
-                        : item.url
-                          ? item.url.startsWith("http")
-                            ? item.url
-                            : `http://localhost:3001${item.url}`
-                          : item.thumbnail || item.src
-                    }
+                    src={getAssetUrl(item)}
                     alt={item.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src =
+                        "https://placehold.co/400x400?text=Error";
+                    }}
                   />
                 )}
                 {item.type === "video" && (

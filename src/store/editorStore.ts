@@ -35,6 +35,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   resources: [],
   zoom: 60,
   timelinePosition: 0,
+  timelineZoom: 50, // Added timelineZoom with default value
   isPlaying: false,
   isDarkMode: false,
   activeLeftTab: "upload",
@@ -117,7 +118,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().saveProject(); // Auto-save on name change
   },
 
-  setZoom: (zoom) => set({ zoom: Math.max(10, Math.min(200, zoom)) }),
+  setZoom: (zoom) => {
+    console.log("Setting zoom to:", zoom);
+    set({ zoom: Math.max(10, Math.min(200, zoom)) });
+  },
+
+  setTimelineZoom: (zoom) =>
+    set({ timelineZoom: Math.max(10, Math.min(200, zoom)) }),
 
   toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
 

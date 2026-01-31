@@ -1,20 +1,37 @@
 import React from "react";
 import { cn, formatTimeShort } from "@/lib/utils";
-import {
-  Image as ImageIcon,
-  Type,
-  Video,
-  Layers,
-  Sparkles,
-  Search,
-} from "lucide-react";
+import { Sparkles, Search } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 
-interface EditorCanvasProps {
-  isEmpty?: boolean;
-}
+const getLayoutDimensions = (layout: string = "16:9") => {
+  switch (layout) {
+    case "1:1":
+      return { width: 1080, height: 1080 };
+    case "16:9":
+      return { width: 1920, height: 1080 };
+    case "9:16":
+      return { width: 1080, height: 1920 };
+    case "4:5":
+      return { width: 1080, height: 1350 };
+    case "2:3":
+      return { width: 1080, height: 1620 };
+    default:
+      return { width: 1920, height: 1080 };
+  }
+};
 
-export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
+const getAssetUrl = (url?: string) => {
+  if (!url) return "";
+  if (
+    url.startsWith("http") ||
+    url.startsWith("data:") ||
+    url.startsWith("blob:")
+  )
+    return url;
+  return `http://localhost:3001${url.startsWith("/") ? "" : "/"}${url}`;
+};
+
+export function EditorCanvas({ isEmpty = false }: { isEmpty?: boolean }) {
   const {
     pages,
     currentPageId,
@@ -24,10 +41,24 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
     timelinePosition,
     isPlaying,
     zoom,
+    pushHistory,
+    undo,
+    redo,
+    deleteElement,
   } = useEditorStore();
 
-  const currentPage = pages.find((p) => p.id === currentPageId);
-  const allElements = currentPage?.elements || [];
+  const currentPage = React.useMemo(
+    () => pages.find((p) => p.id === currentPageId),
+    [pages, currentPageId],
+  );
+  const { width: TOTAL_WIDTH, height: TOTAL_HEIGHT } = React.useMemo(
+    () => getLayoutDimensions(currentPage?.layout || "16:9"),
+    [currentPage?.layout],
+  );
+  const allElements = React.useMemo(
+    () => currentPage?.elements || [],
+    [currentPage?.elements],
+  );
 
   // Filter elements that should be visible at the current playhead
   const elements = allElements.filter(
@@ -56,6 +87,7 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
     type: "move" | "resize",
   ) => {
     e.stopPropagation();
+    pushHistory(); // Record state before changes
     setSelectedElement(element.id);
     setDragState({
       id: element.id,
@@ -70,8 +102,9 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!dragState || !currentPageId) return;
 
-    const dx = e.clientX - dragState.startX;
-    const dy = e.clientY - dragState.startY;
+    const scale = zoom / 100;
+    const dx = (e.clientX - dragState.startX) / scale;
+    const dy = (e.clientY - dragState.startY) / scale;
 
     const element = elements.find((el) => el.id === dragState.id);
     if (!element) return;
@@ -141,13 +174,96 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []); // Remove dependencies to avoid multiple listeners, use getState inside
+  }, [undo, redo, deleteElement, currentPageId, selectedElementId]);
+
+  // Helper to draw elements to canvas (for export recording)
+  React.useEffect(() => {
+    const canvas = document.getElementById(
+      "editor-canvas",
+    ) as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Update canvas size to match current layout
+    const dims = getLayoutDimensions(currentPage?.layout || "16:9");
+    if (canvas.width !== dims.width || canvas.height !== dims.height) {
+      canvas.width = dims.width;
+      canvas.height = dims.height;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Filter elements visible at current playhead
+    const visibleElements = allElements
+      .filter(
+        (el) =>
+          timelinePosition >= el.startTime &&
+          timelinePosition <= el.startTime + el.duration,
+      )
+      .sort((a, b) => ((a as any).layer ?? 0) - ((b as any).layer ?? 0));
+
+    visibleElements.forEach((el) => {
+      ctx.save();
+      ctx.globalAlpha = (el.opacity || 100) / 100;
+
+      const { x, y } = el.position;
+      const { width, height } = el.size;
+
+      if (el.type === "image" || el.type === "video") {
+        // Draw image/video placeholder or actual content if possible
+        // For recording, we'll try to find the actual img/video tag
+        const mediaTag = document.querySelector(
+          `[data-element-id="${el.id}"] ${el.type}`,
+        ) as HTMLImageElement | HTMLVideoElement;
+        if (mediaTag) {
+          try {
+            ctx.drawImage(mediaTag, x, y, width, height);
+          } catch (e) {
+            ctx.fillStyle = "#333";
+            ctx.fillRect(x, y, width, height);
+          }
+        }
+      } else if (el.type === "text") {
+        ctx.fillStyle = (el as any).color || "#ffffff";
+        ctx.font = `${(el as any).fontWeight || "bold"} ${(el as any).fontSize}px Sans-Serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText((el as any).content, x + width / 2, y + height / 2);
+      } else if (el.type === "shape") {
+        ctx.fillStyle = (el as any).color || "#3b82f6";
+        ctx.beginPath();
+        if ((el as any).shapeType === "Circle") {
+          ctx.arc(
+            x + width / 2,
+            y + height / 2,
+            Math.min(width, height) / 2,
+            0,
+            Math.PI * 2,
+          );
+        } else {
+          ctx.rect(x, y, width, height);
+        }
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+  }, [timelinePosition, allElements, currentPage?.layout]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     try {
-      const asset = JSON.parse(e.dataTransfer.getData("application/json"));
-      if (!currentPageId) return;
+      const data = e.dataTransfer.getData("application/json");
+      console.log("Dropped data:", data);
+      const asset = JSON.parse(data);
+      if (!currentPageId) {
+        console.warn("No current page ID selected");
+        return;
+      }
 
       const scale = zoom / 100;
       const rect = e.currentTarget.getBoundingClientRect();
@@ -210,10 +326,22 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
-        style={{ transform: `scale(${zoom / 100})`, transformOrigin: "center" }}
-        className="relative shadow-2xl bg-black aspect-video h-[85%] max-h-150 border border-border/50 rounded-sm overflow-hidden group transition-all duration-300"
+        style={{
+          width: `${TOTAL_WIDTH}px`,
+          height: `${TOTAL_HEIGHT}px`,
+          transform: `scale(${zoom / 100})`,
+          transformOrigin: "center center",
+        }}
+        className="relative shadow-2xl bg-black border border-border/50 rounded-sm overflow-hidden group transition-all duration-300"
       >
-        {isEmpty && elements.length === 0 ? (
+        {/* Hidden Canvas for Recording (DO NOT REMOVE) */}
+        <canvas
+          id="editor-canvas"
+          width={TOTAL_WIDTH}
+          height={TOTAL_HEIGHT}
+          className="absolute inset-0 w-full h-full pointer-events-none opacity-0"
+        />
+        {elements.length === 0 ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-4">
             <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border border-white/10 shadow-inner">
               <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10" />
@@ -235,6 +363,7 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
               return (
                 <div
                   key={element.id}
+                  data-element-id={element.id}
                   onMouseDown={(e) => handleMouseDown(e, element, "move")}
                   className={cn(
                     "absolute select-none group/el",
@@ -249,35 +378,17 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
                   }}
                 >
                   {element.type === "image" && (
-                    <div
-                      className="w-full h-full relative overflow-hidden"
+                    <img
+                      src={getAssetUrl(element.src)}
+                      alt={element.name}
+                      className="w-full h-full object-cover"
                       style={{
                         backgroundColor: (element as any).backgroundColor,
                         borderRadius: (element as any).borderRadius || "0px",
-                        opacity: ((element as any).opacity ?? 100) / 100,
+                        opacity: (element.opacity || 100) / 100,
                       }}
-                    >
-                      {(element as any).src && (
-                        <img
-                          src={(element as any).src}
-                          alt={element.name}
-                          className="w-full h-full object-cover pointer-events-none"
-                        />
-                      )}
-                    </div>
+                    />
                   )}
-
-                  {/* Inserted Canvas Element */}
-                  {/* Assuming canvasRef and other props are defined elsewhere in the component scope */}
-                  <canvas
-                    id="editor-canvas"
-                    // ref={canvasRef} // Uncomment and define canvasRef if needed
-                    width={1920}
-                    height={1080}
-                    className="w-full h-full object-contain shadow-2xl bg-black rounded-lg"
-                    onDrop={handleDrop}
-                    onDragOver={(e) => e.preventDefault()}
-                  />
 
                   {element.type === "video" && (
                     <div
@@ -288,7 +399,7 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
                       }}
                     >
                       <video
-                        src={(element as any).src}
+                        src={getAssetUrl(element.src)}
                         className="w-full h-full object-cover"
                         ref={(el) => {
                           if (el) {
@@ -439,7 +550,11 @@ export function EditorCanvas({ isEmpty = true }: EditorCanvasProps) {
         </div>
         <div className="h-4 w-[1px] bg-border" />
         <div className="flex items-center gap-4 text-text-muted capitalize">
-          <span>{currentPage?.layout || "1920x1080"}</span>
+          <span>{currentPage?.layout || "16:9"}</span>
+          <span className="text-[10px] opacity-30">|</span>
+          <span>
+            {TOTAL_WIDTH}x{TOTAL_HEIGHT}
+          </span>
         </div>
       </div>
     </div>

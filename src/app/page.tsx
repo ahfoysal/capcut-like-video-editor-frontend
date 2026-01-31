@@ -11,7 +11,7 @@ import { PropertiesPanel } from "@/components/PropertiesPanel";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<
-    "upload" | "elements" | "text" | "media" | "live" | "more"
+    "upload" | "elements" | "text" | "media" | "live" | "more" | "layers"
   >("upload");
   const viewMode = useEditorStore((state) => state.viewMode);
 

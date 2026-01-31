@@ -51,6 +51,7 @@ export interface BaseElement {
   freePosition: boolean;
   animation?: Animation;
   layer?: number;
+  opacity?: number;
 }
 
 export interface ImageElement extends BaseElement {
@@ -82,6 +83,7 @@ export interface TextElement extends BaseElement {
   fontWeight: string;
   color: string;
   backgroundColor?: string;
+  textAlign?: "left" | "center" | "right";
 }
 
 export interface QRCodeElement extends BaseElement {
@@ -135,6 +137,7 @@ export interface EditorState {
   resources: Resource[];
   zoom: number;
   timelinePosition: number;
+  timelineZoom: number;
   isPlaying: boolean;
   isDarkMode: boolean;
   activeLeftTab: "upload" | "elements" | "live";
@@ -150,6 +153,7 @@ export interface EditorActions {
   resetProject: () => void;
   setProjectName: (name: string) => void;
   setZoom: (zoom: number) => void;
+  setTimelineZoom: (zoom: number) => void;
   toggleDarkMode: () => void;
   undo: () => void;
   redo: () => void;

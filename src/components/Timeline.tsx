@@ -23,11 +23,12 @@ export function Timeline({ className }: { className?: string }) {
     selectedElementId,
     setSelectedElement,
     updateElement,
+    timelineZoom,
+    setTimelineZoom,
   } = useEditorStore();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const PX_PER_SEC = 50;
-  const TRACK_HEIGHT = 40;
+  const PX_PER_SEC = timelineZoom;
   const HEADER_WIDTH = 120;
 
   const currentPage = pages.find((p) => p.id === currentPageId);
@@ -105,7 +106,7 @@ export function Timeline({ className }: { className?: string }) {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isScrubbing, setTimelinePosition]);
+  }, [isScrubbing, setTimelinePosition, PX_PER_SEC]);
 
   const [timelineDrag, setTimelineDrag] = React.useState<{
     id: string;
@@ -176,7 +177,7 @@ export function Timeline({ className }: { className?: string }) {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [timelineDrag, currentPageId, updateElement]);
+  }, [timelineDrag, currentPageId, updateElement, PX_PER_SEC]);
 
   React.useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
@@ -261,11 +262,24 @@ export function Timeline({ className }: { className?: string }) {
 
         <div className="flex items-center gap-4 border-l border-border pl-4">
           <div className="flex items-center gap-3">
-            <ZoomOut size={16} className="text-text-muted" />
+            <button
+              onClick={() => setTimelineZoom(timelineZoom - 10)}
+              className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
+            >
+              <ZoomOut size={16} />
+            </button>
             <div className="w-32 h-1 bg-white/5 rounded-full relative overflow-hidden">
-              <div className="absolute left-0 top-0 h-full bg-accent w-1/2 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+              <div
+                className="absolute left-0 top-0 h-full bg-accent rounded-full shadow-[0_0_8px_rgba(34,211,238,0.5)] transition-all duration-300"
+                style={{ width: `${(timelineZoom / 200) * 100}%` }}
+              />
             </div>
-            <ZoomIn size={16} className="text-text-muted" />
+            <button
+              onClick={() => setTimelineZoom(timelineZoom + 10)}
+              className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
+            >
+              <ZoomIn size={16} />
+            </button>
           </div>
         </div>
       </div>

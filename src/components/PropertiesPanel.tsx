@@ -16,6 +16,7 @@ import {
   Minus,
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
+import { Element } from "@/types/editor";
 import { cn } from "@/lib/utils";
 
 export function PropertiesPanel() {

@@ -18,14 +18,19 @@ export function TopNav() {
     projectName,
     zoom,
     setZoom,
+    future,
+    currentPageId,
+    pages,
+    updatePage,
     saveProject,
     saveStatus,
     resetProject,
     undo,
     redo,
     history,
-    future,
   } = useEditorStore();
+
+  const currentPage = pages.find((p) => p.id === currentPageId);
 
   const [isExportOpen, setIsExportOpen] = React.useState(false);
 
@@ -48,19 +53,8 @@ export function TopNav() {
       <div className="h-18 w-full bg-bg-app border-b border-border flex items-center px-5 justify-between shrink-0 z-50">
         {/* Left Section: Back, Title, New */}
         <div className="flex items-center gap-5">
-          <button
-            onClick={handleNewProject}
-            title="New Project"
-            className="flex items-center gap-2 text-text-muted hover:text-white transition-all bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/5"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-[11px] font-bold uppercase tracking-wider">
-              New Project
-            </span>
-          </button>
-
           <div className="flex items-center border-r border-border pr-5 h-6">
-            <span className="font-bold text-lg leading-none tracking-tight">
+            <span className="font-bold text-lg leading-none tracking-tight text-white">
               CapCut Editor
             </span>
           </div>
@@ -78,10 +72,40 @@ export function TopNav() {
               </span>
             )}
           </div>
+
+          <button
+            onClick={handleNewProject}
+            title="New Project"
+            className="flex items-center gap-2 text-text-muted hover:text-white transition-all bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/5"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              New Project
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 border-l border-border pl-5">
+          <select
+            value={currentPage?.layout || "16:9"}
+            onChange={(e) => {
+              console.log("Changing layout to:", e.target.value);
+              if (currentPageId) {
+                updatePage(currentPageId, { layout: e.target.value as any });
+              }
+            }}
+            className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[11px] font-bold text-text-main focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            <option value="1:1">1:1 (Square)</option>
+            <option value="16:9">16:9 (Landscape)</option>
+            <option value="9:16">9:16 (Portrait)</option>
+            <option value="4:5">4:5 (Post)</option>
+            <option value="2:3">2:3 (Stories)</option>
+          </select>
         </div>
 
         {/* Center Section: Zoom Controls */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-4 bg-bg-app">
+        <div className="flex-1 flex items-center justify-center gap-4">
           <div className="flex items-center bg-secondary/20 border border-border rounded-lg p-0.5">
             <button
               onClick={() => setZoom(zoom - 10)}

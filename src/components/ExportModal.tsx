@@ -1,3 +1,9 @@
+import React, { useState, useEffect } from "react";
+import {
+  X,
+  Download,
+  Sparkles,
+  CheckCircle2,
   Film,
   Settings2,
 } from "lucide-react";
@@ -13,13 +19,13 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
     "idle",
   );
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
+  const [progress, setProgress] = useState(0);
   const { pages, projectName, setTimelinePosition, isPlaying, togglePlay } =
     useEditorStore();
 
   useEffect(() => {
     let recorderVar: MediaRecorder | null = null;
-    let chunks: Blob[] = [];
+    const chunks: Blob[] = [];
 
     if (status === "exporting") {
       const canvas = document.getElementById(
@@ -30,10 +36,12 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         return;
       }
 
-      const stream = canvas.captureStream(30); // 30 FPS
-      recorderVar = new MediaRecorder(stream, {
-        mimeType: "video/webm;codecs=vp9", // Chrome/Webkit support for high quality
-      });
+      const stream = canvas.captureStream(30);
+      const options = { mimeType: "video/webm;codecs=vp9,opus" };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options.mimeType = "video/webm";
+      }
+      recorderVar = new MediaRecorder(stream, options);
 
       recorderVar.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
@@ -59,32 +67,32 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
       // Start recording
       setTimelinePosition(0);
       recorderVar.start();
-      setIsRecording(true);
 
       // Animation loop for progress
       const startTime = Date.now();
       const playbackDuration = totalDuration * 1000;
 
       let animationFrame: number;
-      const updateProgress = () => {
-        const elapsed = Date.now() - startTime;
-        const currentProgress = Math.min(
-          (elapsed / playbackDuration) * 100,
-          100,
-        );
+      const step = 1 / 30; // 30 FPS step
+      let currentTime = 0;
 
-        setProgress(currentProgress);
-        setTimelinePosition(elapsed / 1000);
-
-        if (elapsed < playbackDuration) {
-          animationFrame = requestAnimationFrame(updateProgress);
-        } else {
+      const renderFrame = async () => {
+        if (currentTime >= totalDuration) {
           recorderVar?.stop();
-          setIsRecording(false);
+          return;
         }
+
+        setTimelinePosition(currentTime);
+        setProgress((currentTime / totalDuration) * 100);
+
+        // Wait for next frame to ensure React and Canvas have rendered
+        currentTime += step;
+        setTimeout(() => {
+          animationFrame = requestAnimationFrame(renderFrame);
+        }, 33); // Small delay to allow canvas painting
       };
 
-      animationFrame = requestAnimationFrame(updateProgress);
+      animationFrame = requestAnimationFrame(renderFrame);
 
       return () => {
         cancelAnimationFrame(animationFrame);
@@ -108,7 +116,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
     const url = URL.createObjectURL(recordedBlob);
     const element = document.createElement("a");
     element.setAttribute("href", url);
-    element.setAttribute("download", `${projectName}.webm`); // WebM is more reliable for MediaRecorder output
+    element.setAttribute("download", `${projectName || "project"}.mp4`);
     element.style.display = "none";
     document.body.appendChild(element);
     element.click();
@@ -188,8 +196,9 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
                     Ready to render
                   </h4>
                   <p className="text-[12px] text-text-muted mt-1 leading-relaxed">
-                    Your project &quot;{projectName}&quot; is optimized and ready for
-                    export. The process will take approximately 1-2 minutes.
+                    Your project &quot;{projectName}&quot; is optimized and
+                    ready for export. The process will take approximately 1-2
+                    minutes.
                   </p>
                 </div>
               </div>
@@ -240,8 +249,8 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
                 Generating Video...
               </h3>
               <p className="text-sm text-text-muted px-12">
-                Encoding frames and stitching layers. Please don&apos;t close this
-                window.
+                Encoding frames and stitching layers. Please don&apos;t close
+                this window.
               </p>
 
               <div className="mt-8 w-full max-w-sm h-1.5 bg-white/5 rounded-full overflow-hidden">
