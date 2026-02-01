@@ -47,7 +47,7 @@ export function TopNav() {
           </button>
           <div className="flex items-center border-r border-border pr-5 h-6">
             <span className="font-bold text-lg leading-none tracking-tight text-white">
-              CapCut Editor
+              Softvence Editor
             </span>
           </div>
 

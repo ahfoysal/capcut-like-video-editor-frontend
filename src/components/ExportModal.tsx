@@ -9,6 +9,17 @@ import {
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 
+const getAssetUrl = (url?: string) => {
+  if (!url) return "";
+  if (
+    url.startsWith("http") ||
+    url.startsWith("data:") ||
+    url.startsWith("blob:")
+  )
+    return url;
+  return `http://localhost:3001${url.startsWith("/") ? "" : "/"}${url}`;
+};
+
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -20,61 +31,189 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
   );
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [progress, setProgress] = useState(0);
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
   const { pages, projectName, setTimelinePosition, isPlaying, togglePlay } =
     useEditorStore();
 
   useEffect(() => {
     let recorderVar: MediaRecorder | null = null;
+    let audioContext: AudioContext | null = null;
+    let audioDestination: MediaStreamAudioDestinationNode | null = null;
     const chunks: Blob[] = [];
 
     if (status === "exporting") {
+      // Enable canvas drawing for export (EditorCanvas checks this)
+      document.body.classList.add("export-in-progress");
+
       const canvas = document.getElementById(
         "editor-canvas",
       ) as HTMLCanvasElement;
       if (!canvas) {
         console.error("Canvas not found");
+        document.body.classList.remove("export-in-progress");
         return;
       }
 
-      const stream = (canvas as any).captureStream(30);
-      const options = { mimeType: "video/webm;codecs=vp9,opus" };
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      // Get the visual stream from canvas
+      const videoStream = canvas.captureStream(30);
+
+      // Create audio context to mix all audio
+      audioContext = new AudioContext({ sampleRate: 44100 });
+      audioDestination = audioContext.createMediaStreamDestination();
+
+      const state = useEditorStore.getState();
+      const allPages = state.pages;
+
+      // Calculate page ranges and total duration
+      let totalDuration = 0;
+      const pageRanges = allPages.map((p) => {
+        const start = totalDuration;
+        const end = totalDuration + p.duration;
+        totalDuration = end;
+        return { id: p.id, start, end };
+      });
+
+      // Combine video and audio streams
+      const combinedStream = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...(audioDestination.stream.getAudioTracks().length > 0
+          ? audioDestination.stream.getAudioTracks()
+          : []),
+      ]);
+
+      const options: MediaRecorderOptions = {
+        mimeType: "video/webm;codecs=vp9,opus",
+        videoBitsPerSecond: 8000000, // High quality
+        audioBitsPerSecond: 128000,
+      };
+      if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
         options.mimeType = "video/webm";
       }
-      recorderVar = new MediaRecorder(stream, options);
+      recorderVar = new MediaRecorder(combinedStream, options);
 
       recorderVar.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
       };
 
       recorderVar.onstop = () => {
+        document.body.classList.remove("export-in-progress");
         const blob = new Blob(chunks, { type: "video/webm" });
         setRecordedBlob(blob);
         setStatus("completed");
         setTimelinePosition(0);
         if (isPlaying) togglePlay();
+        if (audioContext && audioContext.state !== "closed") {
+          audioContext.close();
+        }
       };
 
-      // Calculate total duration
-      const state = useEditorStore.getState();
-      const currentPage = pages.find((p) => p.id === state.currentPageId);
-      const elements = currentPage?.elements || [];
-      const totalDuration = elements.reduce(
-        (max, el) => Math.max(max, el.startTime + el.duration),
-        0,
-      );
+      // Function to connect current page audio elements
+      const connectPageAudio = (pageId: string) => {
+        if (!audioContext || !audioDestination) return;
+        const page = allPages.find((p) => p.id === pageId);
+        if (!page) return;
 
-      // Start recording
+        const audioElements = page.elements.filter((el) => el.type === "audio");
+        const videoElements = page.elements.filter((el) => el.type === "video");
+
+        // Connect Audio
+        audioElements.forEach((el) => {
+          try {
+            const audioEl = Array.from(document.querySelectorAll("audio")).find(
+              (audio) => {
+                const src = audio.getAttribute("src") || "";
+                return src.includes(el.src) || src === getAssetUrl(el.src);
+              },
+            ) as HTMLAudioElement;
+
+            if (audioEl && !(audioEl as any).audioSourceNode) {
+              const source = audioContext!.createMediaElementSource(audioEl);
+              (audioEl as any).audioSourceNode = source;
+              const gainNode = audioContext!.createGain();
+              gainNode.gain.value = (el.volume ?? 100) / 100;
+              source.connect(gainNode);
+              gainNode.connect(audioDestination!);
+            }
+          } catch (e) {
+            console.warn("Audio connection error:", e);
+          }
+        });
+
+        // Connect Video
+        videoElements.forEach((el) => {
+          try {
+            const videoEl = Array.from(document.querySelectorAll("video")).find(
+              (video) => {
+                const src = video.getAttribute("src") || "";
+                return src.includes(el.src) || src === getAssetUrl(el.src);
+              },
+            ) as HTMLVideoElement;
+
+            if (videoEl && !(videoEl as any).audioSourceNode) {
+              videoEl.muted = false; // Must be unmuted for AudioContext to hear it
+              const source = audioContext!.createMediaElementSource(videoEl);
+              (videoEl as any).audioSourceNode = source;
+              const gainNode = audioContext!.createGain();
+              gainNode.gain.value = (el.volume ?? 100) / 100;
+              source.connect(gainNode);
+              gainNode.connect(audioDestination!);
+            }
+          } catch (e) {
+            console.warn("Video audio connection error:", e);
+          }
+        });
+      };
+
+      // Function to wait for images and videos on the page to be ready
+      const waitForMedia = async () => {
+        const mediaElements = Array.from(
+          document.querySelectorAll("#editor-canvas img, #editor-canvas video"),
+        ) as (HTMLImageElement | HTMLVideoElement)[];
+        await Promise.all(
+          mediaElements.map((el) => {
+            if (el.tagName === "IMG") {
+              if ((el as HTMLImageElement).complete) return Promise.resolve();
+              return new Promise((resolve) => {
+                el.onload = resolve;
+                el.onerror = resolve;
+              });
+            } else {
+              // For video, we wait for the seek to complete
+              if (
+                (el as HTMLVideoElement).readyState >= 2 &&
+                !(el as HTMLVideoElement).seeking
+              )
+                return Promise.resolve();
+              return new Promise((resolve) => {
+                el.onseeked = resolve;
+                el.oncanplay = resolve;
+                el.onerror = resolve;
+              });
+            }
+          }),
+        );
+        // Small extra delay for React/DOM updates
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      };
+
+      // Start Recording
       setTimelinePosition(0);
-      recorderVar.start();
+      const startRecording = async () => {
+        if (audioContext?.state === "suspended") {
+          await audioContext.resume();
+        }
+        setTimeout(() => {
+          recorderVar?.start(100);
+          renderFrame();
+        }, 800);
+      };
 
-      // Animation loop for progress
-      const startTime = Date.now();
-      const playbackDuration = totalDuration * 1000;
-
+      // Render Loop
       let animationFrame: number;
-      const step = 1 / 30; // 30 FPS step
       let currentTime = 0;
+      const fps = 30;
+      const step = 1 / fps;
 
       const renderFrame = async () => {
         if (currentTime >= totalDuration) {
@@ -82,23 +221,40 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
           return;
         }
 
-        setTimelinePosition(currentTime);
+        const range = pageRanges.find(
+          (r) => currentTime >= r.start && currentTime < r.end,
+        );
+
+        if (range && range.id !== useEditorStore.getState().currentPageId) {
+          useEditorStore.getState().setCurrentPage(range.id);
+          // Wait for mount and audio connection
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          connectPageAudio(range.id);
+        }
+
+        const relativeTime = range ? currentTime - range.start : 0;
+        setTimelinePosition(relativeTime);
         setProgress((currentTime / totalDuration) * 100);
 
-        // Wait for next frame to ensure React and Canvas have rendered
+        // Wait for elements to seek/load
+        await waitForMedia();
+
         currentTime += step;
-        setTimeout(() => {
-          animationFrame = requestAnimationFrame(renderFrame);
-        }, 33); // Small delay to allow canvas painting
+        animationFrame = requestAnimationFrame(renderFrame);
       };
 
-      animationFrame = requestAnimationFrame(renderFrame);
+      // Initial setup
+      setTimeout(() => {
+        connectPageAudio(state.currentPageId);
+        startRecording();
+      }, 500);
 
       return () => {
+        document.body.classList.remove("export-in-progress");
         cancelAnimationFrame(animationFrame);
-        if (recorderVar && recorderVar.state !== "inactive") {
-          recorderVar.stop();
-        }
+        if (recorderVar && recorderVar.state !== "inactive") recorderVar.stop();
+        if (audioContext && audioContext.state !== "closed")
+          audioContext.close();
       };
     }
   }, [status, pages, setTimelinePosition, isPlaying, togglePlay]);
@@ -108,21 +264,58 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
   const handleStartExport = () => {
     setStatus("exporting");
     setProgress(0);
+    setConvertError(null);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!recordedBlob) return;
 
-    const url = URL.createObjectURL(recordedBlob);
-    const element = document.createElement("a");
-    element.setAttribute("href", url);
-    element.setAttribute("download", `${projectName || "project"}.mp4`);
-    element.style.display = "none";
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-    URL.revokeObjectURL(url);
-    onClose();
+    setIsConverting(true);
+    setConvertError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("video", recordedBlob, "export.webm");
+
+      const res = await fetch("http://localhost:3001/export/convert", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(res.statusText || "Conversion failed");
+      }
+
+      const mp4Blob = await res.blob();
+      const url = URL.createObjectURL(mp4Blob);
+      const element = document.createElement("a");
+      element.setAttribute("href", url);
+      element.setAttribute("download", `${projectName || "project"}.mp4`);
+      element.style.display = "none";
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+      URL.revokeObjectURL(url);
+      onClose();
+    } catch (err) {
+      setConvertError(
+        err instanceof Error
+          ? err.message
+          : "Conversion failed. Downloading as WebM instead.",
+      );
+      // Fallback: download WebM
+      const url = URL.createObjectURL(recordedBlob);
+      const element = document.createElement("a");
+      element.setAttribute("href", url);
+      element.setAttribute("download", `${projectName || "project"}.webm`);
+      element.style.display = "none";
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   return (
@@ -270,16 +463,31 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
               <h3 className="text-2xl font-bold text-text-main mb-2">
                 Export Complete!
               </h3>
-              <p className="text-sm text-text-muted mb-10 px-10 leading-relaxed">
-                Your masterpiece is ready. Click the button below to save it to
-                your device.
+              <p className="text-sm text-text-muted mb-6 px-10 leading-relaxed">
+                Your masterpiece is ready. Click the button below to convert and
+                save as MP4.
               </p>
+              {convertError && (
+                <p className="text-xs text-amber-400 mb-4 px-6">
+                  {convertError}
+                </p>
+              )}
               <button
                 onClick={handleDownload}
-                className="w-full bg-emerald-500 text-white hover:bg-emerald-400 h-14 rounded-xl font-bold text-base transition-all shadow-[0_4px_20px_rgba(16,185,129,0.2)] active:scale-95 flex items-center justify-center gap-3 group"
+                disabled={isConverting}
+                className="w-full bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed h-14 rounded-xl font-bold text-base transition-all shadow-[0_4px_20px_rgba(16,185,129,0.2)] active:scale-95 flex items-center justify-center gap-3 group"
               >
-                <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
-                Download MP4
+                {isConverting ? (
+                  <>
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Converting to MP4...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
+                    Download MP4
+                  </>
+                )}
               </button>
             </div>
           )}

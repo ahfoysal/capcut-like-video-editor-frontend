@@ -1,37 +1,42 @@
 import React from "react";
 import { cn, formatTimeShort } from "@/lib/utils";
-import { Music } from "lucide-react";
+import { Music, Grid3x3 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
+import { GridOverlay } from "@/components/GridOverlay";
+import { LayoutSelector } from "@/components/LayoutSelector";
+import { GridCell, snapToCell } from "@/lib/gridLayouts";
+import { Element } from "@/types/editor";
+
+const generateElementId = () => `el-${Math.random().toString(36).substr(2, 9)}`;
 
 const throttle = <T extends (...args: any[]) => any>(
   func: T,
-  limit: number
+  limit: number,
 ) => {
-  let inThrottle: boolean;
+  let inThrottle: boolean = false;
+  let lastArgs: Parameters<T> | null = null;
+  let lastThis: any = null;
   let lastResult: ReturnType<T>;
-  let lastArgs: Parameters<T>;
-  let lastThis: any;
-  let timeout: ReturnType<typeof setTimeout>;
 
   return function (this: any, ...args: Parameters<T>): ReturnType<T> {
-    lastArgs = args;
-    lastThis = this;
     if (!inThrottle) {
       inThrottle = true;
-      lastResult = func.apply(lastThis, lastArgs);
-      timeout = setTimeout(() => {
+      lastResult = func.apply(this, args);
+      setTimeout(() => {
         inThrottle = false;
-        if (lastArgs && lastThis) {
+        if (lastArgs) {
           lastResult = func.apply(lastThis, lastArgs);
           lastArgs = null;
           lastThis = null;
         }
       }, limit);
+    } else {
+      lastArgs = args;
+      lastThis = this;
     }
     return lastResult;
   };
 };
-
 
 const getLayoutDimensions = (layout: string = "16:9") => {
   switch (layout) {
@@ -63,7 +68,7 @@ const getAssetUrl = (url?: string) => {
 
 const getMediaDuration = (
   url: string,
-  type: "video" | "audio"
+  type: "video" | "audio",
 ): Promise<number> => {
   return new Promise((resolve) => {
     const media = document.createElement(type);
@@ -97,13 +102,16 @@ const CanvasElement = React.memo(
     isPlaying,
     updateElement,
     currentPageId,
+    isDragging,
   }: {
     element: any;
     isSelected: boolean;
+    isDragging: boolean;
     handleMouseDown: (
       e: React.MouseEvent,
       element: any,
-      type: "move" | "resize"
+      type: "move" | "resize",
+      handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se",
     ) => void;
     setEditingElementId: React.Dispatch<React.SetStateAction<string | null>>;
     editingElementId: string | null;
@@ -112,7 +120,7 @@ const CanvasElement = React.memo(
     updateElement: (
       pageId: string,
       elementId: string,
-      updates: Record<string, any>
+      updates: Record<string, any>,
     ) => void;
     currentPageId: string | undefined;
   }) => {
@@ -132,6 +140,11 @@ const CanvasElement = React.memo(
         key={element.id}
         data-element-id={element.id}
         onMouseDown={(e) => handleMouseDown(e, element, "move")}
+        onClick={(e) => {
+          if (isSelected && element.type === "text") {
+            setEditingElementId(element.id);
+          }
+        }}
         onDoubleClick={() => {
           if (element.type === "text") {
             setEditingElementId(element.id);
@@ -140,35 +153,69 @@ const CanvasElement = React.memo(
         className={cn(
           "absolute select-none group/el",
           isSelected &&
-            "ring-[3px] ring-accent z-50 shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+            "ring-[3px] ring-accent z-50 shadow-[0_0_15px_rgba(59,130,246,0.5)]",
+          isDragging && "pointer-events-none opacity-50",
         )}
         style={{
           left: `${element.position.x}px`,
           top: `${element.position.y}px`,
           width: `${element.size.width}px`,
-          height:
-            element.type === "text"
-              ? "auto"
-              : `${element.size.height}px`,
+          height: element.type === "text" ? "auto" : `${element.size.height}px`,
           minHeight:
-            element.type === "text"
-              ? `${element.size.height}px`
-              : undefined,
-          zIndex: isSelected ? 100 : (element as any).layer ?? 0,
+            element.type === "text" ? `${element.size.height}px` : undefined,
+          zIndex: isSelected ? 1000 : ((element as any).layer ?? 0),
         }}
       >
         {element.type === "image" && (
-          <img
-            src={getAssetUrl(element.src)}
-            alt={element.name}
-            crossOrigin="anonymous"
-            className="w-full h-full  object-cover"
-            style={{
-              backgroundColor: (element as any).backgroundColor,
-              borderRadius: (element as any).borderRadius || "0px",
-              opacity: (element.opacity || 100) / 100,
-            }}
-          />
+          <div
+            className="w-full h-full relative overflow-hidden"
+            style={{ borderRadius: (element as any).borderRadius || "0px" }}
+          >
+            <img
+              src={getAssetUrl(element.src)}
+              alt={element.name}
+              crossOrigin="anonymous"
+              onLoad={(e) => {
+                const img = e.target as HTMLImageElement;
+                if (
+                  currentPageId &&
+                  (!(element as any).naturalWidth ||
+                    !(element as any).naturalHeight)
+                ) {
+                  updateElement(currentPageId, element.id, {
+                    naturalWidth: img.naturalWidth,
+                    naturalHeight: img.naturalHeight,
+                  } as any);
+                }
+              }}
+              className={cn(
+                "absolute",
+                !element.crop && "w-full h-full",
+                !element.crop &&
+                  ((element as any).fill === "fit"
+                    ? "object-contain"
+                    : (element as any).fill === "stretch"
+                      ? "object-fill"
+                      : "object-cover"),
+              )}
+              style={{
+                backgroundColor: (element as any).backgroundColor,
+                opacity: (element.opacity || 100) / 100,
+                objectPosition: element.objectPosition
+                  ? `${element.objectPosition.x}% ${element.objectPosition.y}%`
+                  : "center",
+                ...(element.crop
+                  ? {
+                      width: `${10000 / element.crop.width}%`,
+                      height: `${10000 / element.crop.height}%`,
+                      left: `${(-element.crop.x * 100) / element.crop.width}%`,
+                      top: `${(-element.crop.y * 100) / element.crop.height}%`,
+                      objectFit: "cover",
+                    }
+                  : {}),
+              }}
+            />
+          </div>
         )}
 
         {element.type === "video" && (
@@ -185,11 +232,54 @@ const CanvasElement = React.memo(
               preload="auto"
               playsInline
               muted
-              className="w-full h-full object-cover"
+              onLoadedMetadata={(e) => {
+                const video = e.target as HTMLVideoElement;
+                if (
+                  currentPageId &&
+                  (!(element as any).naturalWidth ||
+                    !(element as any).naturalHeight)
+                ) {
+                  updateElement(currentPageId, element.id, {
+                    naturalWidth: video.videoWidth,
+                    naturalHeight: video.videoHeight,
+                  } as any);
+                }
+              }}
+              className={cn(
+                "absolute",
+                !element.crop && "w-full h-full",
+                !element.crop &&
+                  ((element as any).fill === "fit"
+                    ? "object-contain"
+                    : (element as any).fill === "stretch"
+                      ? "object-fill"
+                      : "object-cover"),
+              )}
+              style={{
+                objectPosition: element.objectPosition
+                  ? `${element.objectPosition.x}% ${element.objectPosition.y}%`
+                  : "center",
+                ...(element.crop
+                  ? {
+                      width: `${10000 / element.crop.width}%`,
+                      height: `${10000 / element.crop.height}%`,
+                      left: `${(-element.crop.x * 100) / element.crop.width}%`,
+                      top: `${(-element.crop.y * 100) / element.crop.height}%`,
+                      objectFit: "cover",
+                    }
+                  : {}),
+              }}
               ref={(el) => {
                 if (el) {
-                  const offset = timelinePosition - element.startTime;
-                  if (Math.abs(el.currentTime - offset) > 0.1) {
+                  const rawOffset = timelinePosition - element.startTime;
+                  const naturalDuration = (element as any).naturalDuration;
+                  const trimStart = element.trim?.start || 0;
+                  const offset = naturalDuration
+                    ? (rawOffset % naturalDuration) + trimStart
+                    : rawOffset + trimStart;
+
+                  // Only update if difference is significant to reduce lag
+                  if (Math.abs(el.currentTime - offset) > 0.15) {
                     el.currentTime = offset;
                   }
                   if (isPlaying && el.paused) el.play().catch(() => {});
@@ -217,19 +307,28 @@ const CanvasElement = React.memo(
 
         {element.type === "text" && (
           <div
-            className="w-full flex items-center justify-center break-words text-center px-4 py-2"
+            className="w-full flex items-center justify-center wrap-break-word text-center px-4 py-2"
             style={{
               fontSize: `${(element as any).fontSize}px`,
               fontWeight: (element as any).fontWeight,
+              fontFamily: (element as any).fontFamily || "Inter, sans-serif",
               color: (element as any).color || "#ffffff",
               backgroundColor:
                 (element as any).backgroundColor || "transparent",
               opacity: ((element as any).opacity ?? 100) / 100,
-              textAlign:
-                ((element as any).textAlign as any) || "center",
+              textAlign: ((element as any).textAlign as any) || "center",
               lineHeight: 1.1,
               borderRadius: (element as any).borderRadius || "0px",
-              pointerEvents: editingElementId === element.id ? "all" : "none",
+              padding:
+                (element as any).backgroundColor &&
+                (element as any).backgroundColor !== "transparent"
+                  ? "8px"
+                  : "0px",
+              WebkitTextStroke:
+                (element as any).strokeWidth > 0
+                  ? `${(element as any).strokeWidth}px ${(element as any).strokeColor || "#000000"}`
+                  : "none",
+              pointerEvents: isSelected ? "all" : "none",
             }}
           >
             {editingElementId === element.id ? (
@@ -265,6 +364,36 @@ const CanvasElement = React.memo(
                   target.style.height = `${target.scrollHeight}px`;
                 }}
               />
+            ) : (element as any).marquee ? (
+              (() => {
+                const speed = (element as any).marqueeSpeed || 10;
+                const duration = Math.max(1, speed);
+                const elapsed = Math.max(
+                  0,
+                  timelinePosition - element.startTime,
+                );
+                const progress = (elapsed % duration) / duration;
+                const direction = (element as any).marqueeDirection || "left";
+
+                // Formula to start at 0 (fully visible) and loop
+                const offset =
+                  direction === "left"
+                    ? ((1.5 - progress) % 1) * 200 - 100
+                    : ((0.5 + progress) % 1) * 200 - 100;
+                return (
+                  <div className="relative w-full h-full overflow-hidden flex items-center">
+                    <div
+                      className="whitespace-nowrap inline-block absolute will-change-transform"
+                      style={{
+                        left: 0,
+                        transform: `translateX(${offset}%)`,
+                      }}
+                    >
+                      {(element as any).content}
+                    </div>
+                  </div>
+                );
+              })()
             ) : (
               (element as any).content
             )}
@@ -327,18 +456,46 @@ const CanvasElement = React.memo(
         {/* Selection Handles */}
         {isSelected && (
           <>
-            <div className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50" />
-            <div className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50" />
-            <div className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50" />
+            {/* Corners */}
             <div
-              className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-white border-2 border-accent rounded-full shadow-lg cursor-se-resize hover:scale-125 transition-transform z-50"
-              onMouseDown={(e) => handleMouseDown(e, element, "resize")}
+              className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-nw-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "nw")}
+            />
+            <div
+              className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-ne-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "ne")}
+            />
+            <div
+              className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-sw-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "sw")}
+            />
+            <div
+              className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-se-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "se")}
+            />
+
+            {/* Sides */}
+            <div
+              className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-w-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "w")}
+            />
+            <div
+              className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-e-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "e")}
+            />
+            <div
+              className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-n-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "n")}
+            />
+            <div
+              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-s-resize hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, element, "resize", "s")}
             />
           </>
         )}
       </div>
     );
-  }
+  },
 );
 CanvasElement.displayName = "CanvasElement";
 
@@ -358,23 +515,28 @@ export function EditorCanvas() {
     deleteElement,
     copyElement,
     pasteElement,
+    setGridMode,
+    setPageGridLayout,
+    moveElementToPage,
   } = useEditorStore();
 
   const [editingElementId, setEditingElementId] = React.useState<string | null>(
-    null
+    null,
   );
+  const [hoveredCell, setHoveredCell] = React.useState<GridCell | null>(null);
+  const [showLayoutSelector, setShowLayoutSelector] = React.useState(false);
 
   const currentPage = React.useMemo(
     () => pages.find((p) => p.id === currentPageId),
-    [pages, currentPageId]
+    [pages, currentPageId],
   );
   const { width: TOTAL_WIDTH, height: TOTAL_HEIGHT } = React.useMemo(
     () => getLayoutDimensions(currentPage?.layout || "16:9"),
-    [currentPage?.layout]
+    [currentPage?.layout],
   );
   const allElements = React.useMemo(
     () => currentPage?.elements || [],
-    [currentPage?.elements]
+    [currentPage?.elements],
   );
 
   // Filter elements that should be visible at the current playhead
@@ -382,7 +544,7 @@ export function EditorCanvas() {
     (el) =>
       el.type !== "audio" && // Hide audio from visual canvas
       timelinePosition >= el.startTime &&
-      timelinePosition <= el.startTime + el.duration
+      timelinePosition <= el.startTime + el.duration,
   );
 
   // All audio elements (render every one so they preload; each only plays when in range)
@@ -399,14 +561,21 @@ export function EditorCanvas() {
     startY: number;
     initialX: number;
     initialY: number;
+    initialWidth: number;
+    initialHeight: number;
+    initialObjectPosition?: { x: number; y: number };
+    initialCrop?: { x: number; y: number; width: number; height: number };
     type: "move" | "resize";
+    handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se";
   } | null>(null);
 
   const handleMouseDown = (
     e: React.MouseEvent,
-    element: any,
-    type: "move" | "resize"
+    element: Element,
+    type: "move" | "resize",
+    handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se",
   ) => {
+    e.preventDefault();
     e.stopPropagation();
     pushHistory(); // Record state before changes
     setSelectedElement(element.id);
@@ -416,15 +585,31 @@ export function EditorCanvas() {
       startY: e.clientY,
       initialX: element.position.x,
       initialY: element.position.y,
+      initialWidth: element.size.width,
+      initialHeight: element.size.height,
+      initialObjectPosition: element.objectPosition || { x: 50, y: 50 },
+      initialCrop: element.crop || { x: 0, y: 0, width: 100, height: 100 },
       type,
+      handleType,
     });
   };
 
-  const throttledUpdateElement = React.useCallback(
-    throttle((pageId, elementId, updates) => {
-      useEditorStore.getState().updateElement(pageId, elementId, updates);
-    }, 30),
-    []
+  const throttledUpdateElement = React.useMemo(
+    () =>
+      throttle((pageId: string, elementId: string, updates: any) => {
+        useEditorStore.getState().updateElement(pageId, elementId, updates);
+      }, 30),
+    [],
+  );
+
+  const throttledMoveToPage = React.useMemo(
+    () =>
+      throttle((sourceId: string, targetId: string, elementId: string) => {
+        useEditorStore
+          .getState()
+          .moveElementToPage(sourceId, targetId, elementId);
+      }, 500),
+    [],
   );
 
   const handleMouseMove = React.useCallback(
@@ -438,47 +623,195 @@ export function EditorCanvas() {
       const element = allElements.find((el) => el.id === dragState.id);
       if (!element) return;
 
+      // Cross-page dragging check
       if (dragState.type === "move") {
+        const elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+        const targetPageTab = elementAtPoint?.closest("[data-page-tab-id]");
+        const targetPageId = targetPageTab?.getAttribute("data-page-tab-id");
+
+        if (targetPageId && targetPageId !== currentPageId) {
+          throttledMoveToPage(currentPageId, targetPageId, dragState.id);
+          return;
+        }
+      }
+
+      if (dragState.type === "move") {
+        // Universal Alt + Drag for panning media
+        if (
+          e.altKey &&
+          (element.type === "image" || element.type === "video")
+        ) {
+          const initCrop = dragState.initialCrop || {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+          };
+          const deltaX =
+            (e.clientX - dragState.startX) / (scale * element.size.width);
+          const deltaY =
+            (e.clientY - dragState.startY) / (scale * element.size.height);
+
+          // Panning essentially shifts the x/y of the crop box
+          // We shift it in the OPPOSITE direction of the drag to move the "view"
+          const newCropX = initCrop.x - deltaX * initCrop.width;
+          const newCropY = initCrop.y - deltaY * initCrop.height;
+
+          throttledUpdateElement(currentPageId, dragState.id, {
+            crop: {
+              ...initCrop,
+              x: Math.max(0, Math.min(100 - initCrop.width, newCropX)),
+              y: Math.max(0, Math.min(100 - initCrop.height, newCropY)),
+            },
+          });
+          return;
+        }
+
+        let newSize = element.size;
+        let gridCell = element.gridCell;
+
+        let newX = dragState.initialX + dx;
+        let newY = dragState.initialY + dy;
+
+        // Snap to grid if enabled (for elements not currently in a grid cell)
+        if (currentPage?.gridMode && currentPage?.gridLayout) {
+          const snapped = snapToCell(
+            newX + element.size.width / 2, // Snap center of element
+            newY + element.size.height / 2,
+            TOTAL_WIDTH,
+            TOTAL_HEIGHT,
+            currentPage.gridLayout,
+          );
+
+          if (snapped) {
+            newX = snapped.x;
+            newY = snapped.y;
+            newSize = { width: snapped.width, height: snapped.height };
+            gridCell = {
+              cellId: snapped.cell.id,
+              col: snapped.cell.col,
+              row: snapped.cell.row,
+            };
+
+            // Highlight hovered cell
+            setHoveredCell(snapped.cell);
+          }
+        }
+
         throttledUpdateElement(currentPageId, dragState.id, {
-          position: {
-            x: dragState.initialX + dx,
-            y: dragState.initialY + dy,
-          },
+          position: { x: newX, y: newY },
+          size: newSize,
+          gridCell: gridCell,
         });
       } else if (dragState.type === "resize") {
-        const newWidth = Math.max(20, element.size.width + dx);
-        const newHeight = Math.max(20, element.size.height + dy);
+        let newWidth = dragState.initialWidth;
+        let newHeight = dragState.initialHeight;
+        let newX = dragState.initialX;
+        let newY = dragState.initialY;
+        const handle = dragState.handleType || "se";
+
+        // Image/Video: Preserve Aspect Ratio
+        if (element.type === "image" || element.type === "video") {
+          let scaleChange = 0;
+
+          // Determine the scale change based on the handle being dragged
+          if (handle === "e") scaleChange = dx / dragState.initialWidth;
+          else if (handle === "w") scaleChange = -dx / dragState.initialWidth;
+          else if (handle === "s") scaleChange = dy / dragState.initialHeight;
+          else if (handle === "n") scaleChange = -dy / dragState.initialHeight;
+          else if (handle === "se")
+            scaleChange = Math.max(
+              dx / dragState.initialWidth,
+              dy / dragState.initialHeight,
+            );
+          else if (handle === "nw")
+            scaleChange = Math.max(
+              -dx / dragState.initialWidth,
+              -dy / dragState.initialHeight,
+            );
+          else if (handle === "ne")
+            scaleChange = Math.max(
+              dx / dragState.initialWidth,
+              -dy / dragState.initialHeight,
+            );
+          else if (handle === "sw")
+            scaleChange = Math.max(
+              -dx / dragState.initialWidth,
+              dy / dragState.initialHeight,
+            );
+
+          const minScale =
+            20 / Math.min(dragState.initialWidth, dragState.initialHeight);
+          const finalScale = Math.max(minScale, 1 + scaleChange);
+
+          newWidth = dragState.initialWidth * finalScale;
+          newHeight = dragState.initialHeight * finalScale;
+
+          // Mid handle scaling centers horizontally relative to the anchor side
+          if (handle === "n" || handle === "s") {
+            newX = dragState.initialX - (newWidth - dragState.initialWidth) / 2;
+          } else if (handle === "e" || handle === "w") {
+            // Mid handle scaling centers vertically relative to the anchor side
+            newY =
+              dragState.initialY - (newHeight - dragState.initialHeight) / 2;
+          }
+
+          if (handle.includes("w"))
+            newX = dragState.initialX + (dragState.initialWidth - newWidth);
+          if (handle.includes("n"))
+            newY = dragState.initialY + (dragState.initialHeight - newHeight);
+        } else {
+          // Others (Text, Shapes): Free resizing
+          if (handle.includes("e")) {
+            newWidth = Math.max(20, dragState.initialWidth + dx);
+          } else if (handle.includes("w")) {
+            const deltaX = Math.min(dx, dragState.initialWidth - 20);
+            newWidth = dragState.initialWidth - deltaX;
+            newX = dragState.initialX + deltaX;
+          }
+
+          if (handle.includes("s")) {
+            newHeight = Math.max(20, dragState.initialHeight + dy);
+          } else if (handle.includes("n")) {
+            const deltaY = Math.min(dy, dragState.initialHeight - 20);
+            newHeight = dragState.initialHeight - deltaY;
+            newY = dragState.initialY + deltaY;
+          }
+        }
 
         const updates: any = {
-          size: {
-            width: newWidth,
-            height: newHeight,
-          },
+          size: { width: newWidth, height: newHeight },
+          position: { x: newX, y: newY },
         };
 
-        // If it's a text element, scale the font size proportional to height change
+        // Font scaling for text elements
         if (element.type === "text") {
           const heightRatio = newHeight / element.size.height;
           updates.fontSize = Math.round(
-            (element as any).fontSize * heightRatio
+            (element as any).fontSize * heightRatio,
           );
         }
 
         throttledUpdateElement(currentPageId, dragState.id, updates);
-
-        // Update start positions to handle continuous resizing
-        setDragState({
-          ...dragState,
-          startX: e.clientX,
-          startY: e.clientY,
-        });
       }
     },
-    [dragState, currentPageId, zoom, allElements, throttledUpdateElement]
+    [
+      dragState,
+      currentPageId,
+      zoom,
+      allElements,
+      throttledUpdateElement,
+      TOTAL_WIDTH,
+      TOTAL_HEIGHT,
+      currentPage?.gridMode,
+      currentPage?.gridLayout,
+      throttledMoveToPage,
+    ],
   );
 
   const handleMouseUp = () => {
     setDragState(null);
+    setHoveredCell(null);
   };
 
   // Keyboard shortcuts
@@ -563,16 +896,21 @@ export function EditorCanvas() {
         const el = audioRef.current;
         if (!el || !isReady) return;
 
-        const SYNC_INTERVAL_MS = 40;
+        const SYNC_INTERVAL_MS = 50; // Slightly higher for better performance
 
         const sync = () => {
           const state = useEditorStore.getState();
           const t = state.isPlaying
             ? state.playbackTimeRef.current
             : state.timelinePosition;
-          const offset = t - element.startTime;
-          const inRange = offset >= 0 && offset <= element.duration;
-          const clampedOffset = Math.max(0, Math.min(offset, element.duration));
+          const rawOffset = t - element.startTime;
+          const naturalDuration = (element as any).naturalDuration;
+          const trimStart = element.trim?.start || 0;
+          const inRange = rawOffset >= 0 && rawOffset <= element.duration;
+          const offset = naturalDuration
+            ? (rawOffset % naturalDuration) + trimStart
+            : rawOffset + trimStart;
+          const clampedOffset = Math.max(0, offset);
           const volume = (element.volume ?? 100) / 100;
 
           el.muted = false;
@@ -581,7 +919,8 @@ export function EditorCanvas() {
           if (state.isPlaying) {
             if (inRange) {
               const diff = Math.abs(el.currentTime - clampedOffset);
-              if (el.paused || diff > 0.1) {
+              // Increased threshold to reduce unnecessary seeks
+              if (el.paused || diff > 0.15) {
                 el.currentTime = clampedOffset;
                 el.play().catch(() => {});
                 lastSyncTime.current = Date.now();
@@ -623,7 +962,7 @@ export function EditorCanvas() {
           playsInline
         />
       );
-    }
+    },
   );
   AudioPlayer.displayName = "AudioPlayer";
 
@@ -633,7 +972,7 @@ export function EditorCanvas() {
     if (!isExporting) return;
 
     const canvas = document.getElementById(
-      "editor-canvas"
+      "editor-canvas",
     ) as HTMLCanvasElement;
     if (!canvas) return;
 
@@ -655,52 +994,211 @@ export function EditorCanvas() {
       .filter(
         (el) =>
           timelinePosition >= el.startTime &&
-          timelinePosition <= el.startTime + el.duration
+          timelinePosition <= el.startTime + el.duration,
       )
       .sort((a, b) => ((a as any).layer ?? 0) - ((b as any).layer ?? 0));
 
     visibleElements.forEach((el) => {
       ctx.save();
-      ctx.globalAlpha = (el.opacity || 100) / 100;
+      const alpha = (el.opacity || 100) / 100;
+      ctx.globalAlpha = alpha;
 
       const { x, y } = el.position;
       const { width, height } = el.size;
 
+      // Draw background if exists
+      if (
+        (el as any).backgroundColor &&
+        (el as any).backgroundColor !== "transparent"
+      ) {
+        ctx.fillStyle = (el as any).backgroundColor;
+        if ((el as any).borderRadius) {
+          const radius = parseInt((el as any).borderRadius);
+          ctx.beginPath();
+          ctx.roundRect(x, y, width, height, radius);
+          ctx.fill();
+        } else {
+          ctx.fillRect(x, y, width, height);
+        }
+      }
+
       if (el.type === "image" || el.type === "video") {
         const mediaTag = document.querySelector(
-          `[data-element-id="${el.id}"] ${el.type}`
+          `[data-element-id="${el.id}"] ${el.type}`,
         ) as HTMLImageElement | HTMLVideoElement;
         if (mediaTag) {
           try {
-            ctx.drawImage(mediaTag, x, y, width, height);
+            const crop = el.crop || { x: 0, y: 0, width: 100, height: 100 };
+            const nWidth =
+              (mediaTag as HTMLVideoElement).videoWidth ||
+              (mediaTag as HTMLImageElement).naturalWidth ||
+              width;
+            const nHeight =
+              (mediaTag as HTMLVideoElement).videoHeight ||
+              (mediaTag as HTMLImageElement).naturalHeight ||
+              height;
+
+            const sx = (crop.x / 100) * nWidth;
+            const sy = (crop.y / 100) * nHeight;
+            const sw = (crop.width / 100) * nWidth;
+            const sh = (crop.height / 100) * nHeight;
+
+            if ((el as any).borderRadius) {
+              const radius = parseInt((el as any).borderRadius);
+              ctx.beginPath();
+              ctx.roundRect(x, y, width, height, radius);
+              ctx.clip();
+            }
+
+            ctx.drawImage(mediaTag, sx, sy, sw, sh, x, y, width, height);
           } catch (e) {
             ctx.fillStyle = "#333";
             ctx.fillRect(x, y, width, height);
           }
         }
       } else if (el.type === "text") {
-        ctx.fillStyle = (el as any).color || "#ffffff";
-        ctx.font = `${(el as any).fontWeight || "bold"} ${
-          (el as any).fontSize
-        }px Sans-Serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText((el as any).content, x + width / 2, y + height / 2);
+        const fontSize = (el as any).fontSize || 40;
+        const color = (el as any).color || "#ffffff";
+        const fontWeight = (el as any).fontWeight || "bold";
+        const textAlign = (el as any).textAlign || "center";
+        const fontFamily = (el as any).fontFamily || "Sans-Serif";
+        const content = (el as any).content || "";
+        const strokeWidth = (el as any).strokeWidth || 0;
+        const strokeColor = (el as any).strokeColor || "#000000";
+
+        ctx.fillStyle = color;
+        ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+        ctx.textAlign = textAlign as CanvasTextAlign;
+        ctx.textBaseline = "top";
+
+        const lines = content.split("\n");
+        const lineHeight = fontSize * 1.1;
+
+        lines.forEach((line: string, index: number) => {
+          let lx = x;
+          const ly = y + index * lineHeight;
+
+          if ((el as any).marquee) {
+            const speed = (el as any).marqueeSpeed || 10;
+            const duration = Math.max(1, speed);
+            const elapsed = Math.max(0, timelinePosition - el.startTime);
+            const progress = (elapsed % duration) / duration;
+            const direction = (el as any).marqueeDirection || "left";
+
+            // Marquee logic: Sync start at 0 (fully visible)
+            const textWidthPx = ctx.measureText(line).width;
+            const totalTravel = width + textWidthPx;
+            const pStart = textWidthPx / totalTravel;
+
+            let currentOffsetPx;
+            if (direction === "left") {
+              const p = (pStart + progress) % 1;
+              currentOffsetPx = textWidthPx - p * totalTravel;
+            } else {
+              const p = (pStart - progress + 1) % 1;
+              currentOffsetPx = textWidthPx - p * totalTravel;
+            }
+
+            lx = x + currentOffsetPx;
+          } else {
+            if (textAlign === "center") lx = x + width / 2;
+            else if (textAlign === "right") lx = x + width;
+          }
+
+          // Draw stroke first if enabled
+          if (strokeWidth > 0) {
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = strokeWidth * 2;
+            ctx.lineJoin = "round";
+            ctx.strokeText(line, lx, ly);
+          }
+
+          ctx.fillText(line, lx, ly);
+        });
       } else if (el.type === "shape") {
         ctx.fillStyle = (el as any).color || "#3b82f6";
+        ctx.strokeStyle = (el as any).color || "#3b82f6";
+        ctx.lineWidth = 2;
+        const shapeType = (el as any).shapeType;
+
         ctx.beginPath();
-        if ((el as any).shapeType === "Circle") {
+        if (shapeType === "Circle") {
           ctx.arc(
             x + width / 2,
             y + height / 2,
             Math.min(width, height) / 2,
             0,
-            Math.PI * 2
+            Math.PI * 2,
           );
+          ctx.fill();
+        } else if (shapeType === "Square") {
+          const radius = parseInt((el as any).borderRadius || "0");
+          ctx.roundRect(x, y, width, height, radius);
+          ctx.fill();
+        } else if (shapeType === "Triangle") {
+          ctx.moveTo(x + width / 2, y);
+          ctx.lineTo(x + width, y + height);
+          ctx.lineTo(x, y + height);
+          ctx.closePath();
+          ctx.fill();
+        } else if (shapeType === "Star") {
+          const cx = x + width / 2;
+          const cy = y + height / 2;
+          const outerRadius = Math.min(width, height) / 2;
+          const innerRadius = outerRadius / 2.5;
+          const spikes = 5;
+          let rot = (Math.PI / 2) * 3;
+          const step = Math.PI / spikes;
+
+          ctx.moveTo(cx, cy - outerRadius);
+          for (let i = 0; i < spikes; i++) {
+            ctx.lineTo(
+              cx + Math.cos(rot) * outerRadius,
+              cy + Math.sin(rot) * outerRadius,
+            );
+            rot += step;
+            ctx.lineTo(
+              cx + Math.cos(rot) * innerRadius,
+              cy + Math.sin(rot) * innerRadius,
+            );
+            rot += step;
+          }
+          ctx.lineTo(cx, cy - outerRadius);
+          ctx.closePath();
+          ctx.fill();
+        } else if (shapeType === "Heart") {
+          const cx = x + width / 2;
+          const cy = y + height / 2.5;
+          const d = Math.min(width, height);
+          ctx.moveTo(cx, cy + d / 4);
+          ctx.bezierCurveTo(cx, cy, cx - d / 2, cy, cx - d / 2, cy - d / 4);
+          ctx.bezierCurveTo(
+            cx - d / 2,
+            cy - d / 2,
+            cx,
+            cy - d / 2,
+            cx,
+            cy - d / 4,
+          );
+          ctx.bezierCurveTo(
+            cx,
+            cy - d / 2,
+            cx + d / 2,
+            cy - d / 2,
+            cx + d / 2,
+            cy - d / 4,
+          );
+          ctx.bezierCurveTo(cx + d / 2, cy, cx, cy, cx, cy + d / 4);
+          ctx.fill();
         } else {
-          ctx.rect(x, y, width, height);
+          // Fallback for complex icons (Simple placeholder)
+          ctx.roundRect(x, y, width, height, 5);
+          ctx.stroke();
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.font = "12px Sans-Serif";
+          ctx.fillText(shapeType, x + width / 2, y + height / 2);
         }
-        ctx.fill();
       }
       ctx.restore();
     });
@@ -710,7 +1208,6 @@ export function EditorCanvas() {
     e.preventDefault();
     try {
       const data = e.dataTransfer.getData("application/json");
-      console.log("Dropped data:", data);
       const asset = JSON.parse(data);
       if (!currentPageId) {
         console.warn("No current page ID selected");
@@ -731,29 +1228,66 @@ export function EditorCanvas() {
         duration = 10; // Default images to 10s
       }
 
+      let finalX = x - 100;
+      let finalY = y - 75;
+      let finalSize = { width: 200, height: 150 };
+      let gridCell = null;
+
+      // Snap to grid if enabled
+      if (currentPage?.gridMode && currentPage?.gridLayout) {
+        const snapped = snapToCell(
+          x,
+          y,
+          TOTAL_WIDTH,
+          TOTAL_HEIGHT,
+          currentPage.gridLayout,
+        );
+        if (snapped) {
+          finalX = snapped.x;
+          finalY = snapped.y;
+          finalSize = { width: snapped.width, height: snapped.height };
+          gridCell = {
+            cellId: snapped.cell.id,
+            col: snapped.cell.col,
+            row: snapped.cell.row,
+          };
+        }
+      }
+
       const newElement: any = {
-        id: `el-${Date.now()}`,
+        id: generateElementId(),
         type: asset.type,
         name: asset.name || asset.label,
-        position: { x: x - 100, y: y - 75 },
-        size: { width: 200, height: 150 },
+        position: { x: finalX, y: finalY },
+        size: finalSize,
+        gridCell,
         duration,
         startTime: timelinePosition,
-        freePosition: true,
+        freePosition: !currentPage?.gridMode,
         opacity: 100,
-        layer: Date.now(),
+        layer: 0,
       };
+
+      const hasVisuals = allElements.some(
+        (el) => el.type === "image" || el.type === "video",
+      );
+      const defaultFill = hasVisuals ? "fill" : "fit";
 
       if (asset.type === "image") {
         newElement.src = asset.url || asset.src;
-        newElement.fill = "fill";
-        newElement.size = { width: 400, height: 300 };
+        newElement.fill = defaultFill;
+        if (!gridCell) {
+          newElement.size = { width: 400, height: 300 };
+        }
       } else if (asset.type === "video") {
         newElement.src = asset.url || asset.src;
         newElement.thumbnail = asset.thumbnail;
         newElement.volume = 75;
-        newElement.fill = "fill";
-        newElement.size = { width: 320, height: 180 };
+        newElement.fill = defaultFill;
+        if (!gridCell) {
+          newElement.size = { width: 320, height: 180 };
+        }
+        newElement.naturalDuration = duration;
       } else if (asset.type === "shape") {
         newElement.type = "shape";
         newElement.shapeType = asset.name;
@@ -772,6 +1306,7 @@ export function EditorCanvas() {
         newElement.src = asset.url || asset.src;
         newElement.volume = 100;
         newElement.size = { width: 150, height: 60 };
+        newElement.naturalDuration = duration;
       }
 
       useEditorStore.getState().addElement(currentPageId, newElement);
@@ -787,7 +1322,56 @@ export function EditorCanvas() {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onDragOver={(e) => e.preventDefault()}
+      onWheel={(e) => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -5 : 5;
+          useEditorStore.getState().setZoom(zoom + delta);
+        }
+      }}
     >
+      {/* Grid Toggle Button - Top Left */}
+      <div className="absolute top-6 left-6 z-10 flex flex-col gap-2">
+        <button
+          onClick={() => {
+            if (currentPage?.gridMode) {
+              setGridMode(currentPageId, false);
+            } else {
+              setShowLayoutSelector(true);
+            }
+          }}
+          className={cn(
+            "w-10 h-10 rounded-lg border-2 transition-all flex items-center justify-center shadow-lg backdrop-blur-md",
+            currentPage?.gridMode
+              ? "bg-[#5956E8] border-[#5956E8] text-white"
+              : "bg-white/80 border-white/20 text-gray-600 hover:border-[#5956E8] hover:text-[#5956E8]",
+          )}
+          title={currentPage?.gridMode ? "Disable Grid" : "Enable Grid"}
+        >
+          <Grid3x3 className="w-5 h-5" />
+        </button>
+
+        {currentPage?.gridMode && (
+          <button
+            onClick={() => setShowLayoutSelector(true)}
+            className="w-10 h-10 rounded-lg border-2 bg-white/80 border-white/20 text-gray-600 hover:border-[#5956E8] hover:text-[#5956E8] transition-all flex items-center justify-center shadow-lg backdrop-blur-md"
+            title="Change Layout"
+          >
+            <span className="text-[10px] font-bold">GRID</span>
+          </button>
+        )}
+      </div>
+
+      {/* Layout Selector Modal */}
+      <LayoutSelector
+        isOpen={showLayoutSelector}
+        onClose={() => setShowLayoutSelector(false)}
+        onSelectLayout={(layout) => {
+          setPageGridLayout(currentPageId, layout);
+          setGridMode(currentPageId, true);
+        }}
+        currentLayout={currentPage?.gridLayout || null}
+      />
       {/* Canvas Container */}
       <div
         onDragOver={(e) => e.preventDefault()}
@@ -808,6 +1392,17 @@ export function EditorCanvas() {
           height={TOTAL_HEIGHT}
           className="absolute inset-0 w-full h-full pointer-events-none opacity-0"
         />
+
+        {/* Grid Overlay */}
+        {currentPage?.gridMode && currentPage?.gridLayout && (
+          <GridOverlay
+            layout={currentPage.gridLayout}
+            canvasWidth={TOTAL_WIDTH}
+            canvasHeight={TOTAL_HEIGHT}
+            hoveredCell={hoveredCell}
+            onCellHover={setHoveredCell}
+          />
+        )}
 
         {/* Hidden Audio Playback - render all audio so they preload; each plays only when in range */}
         <div
@@ -849,6 +1444,7 @@ export function EditorCanvas() {
                 key={element.id}
                 element={element}
                 isSelected={element.id === selectedElementId}
+                isDragging={dragState?.id === element.id}
                 handleMouseDown={handleMouseDown}
                 setEditingElementId={setEditingElementId}
                 editingElementId={editingElementId}
@@ -865,26 +1461,7 @@ export function EditorCanvas() {
         <div className="absolute inset-0 pointer-events-none border border-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
 
-      {/* Canvas Controls */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 h-11 bg-bg-panel border border-border rounded-full flex items-center px-6 gap-6 text-[11px] font-bold text-text-main shadow-2xl backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <span className="text-accent">
-            {formatTimeShort(timelinePosition)}
-          </span>
-          <span className="text-text-muted">/</span>
-          <span className="text-text-main">
-            {formatTimeShort(totalDuration)}
-          </span>
-        </div>
-        <div className="h-4 w-[1px] bg-border" />
-        <div className="flex items-center gap-4 text-text-muted capitalize">
-          <span>{currentPage?.layout || "16:9"}</span>
-          <span className="text-[10px] opacity-30">|</span>
-          <span>
-            {TOTAL_WIDTH}X{TOTAL_HEIGHT}
-          </span>
-        </div>
-      </div>
+      {/* Canvas Controls removed - relocated to Timeline header */}
     </div>
   );
 }

@@ -52,6 +52,10 @@ export interface BaseElement {
   animation?: Animation;
   layer?: number;
   opacity?: number;
+  gridCell?: { cellId: string; col: number; row: number } | null;
+  objectPosition?: { x: number; y: number };
+  crop?: { x: number; y: number; width: number; height: number };
+  trim?: { start: number; end: number };
 }
 
 export interface ImageElement extends BaseElement {
@@ -66,6 +70,7 @@ export interface VideoElement extends BaseElement {
   volume: number;
   fill: "fill" | "fit" | "stretch";
   thumbnail?: string;
+  naturalDuration?: number;
 }
 
 export interface AudioElement extends BaseElement {
@@ -74,6 +79,7 @@ export interface AudioElement extends BaseElement {
   volume: number;
   fadeIn: number;
   fadeOut: number;
+  naturalDuration?: number;
 }
 
 export interface TextElement extends BaseElement {
@@ -83,7 +89,14 @@ export interface TextElement extends BaseElement {
   fontWeight: string;
   color: string;
   backgroundColor?: string;
+  borderRadius?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  fontFamily?: string;
   textAlign?: "left" | "center" | "right";
+  marquee?: boolean;
+  marqueeSpeed?: number;
+  marqueeDirection?: "left" | "right";
 }
 
 export interface QRCodeElement extends BaseElement {
@@ -106,6 +119,37 @@ export type Element =
   | QRCodeElement
   | ShapeElement;
 
+export type GridLayoutType =
+  | "single"
+  | "2col"
+  | "3col"
+  | "2row"
+  | "2x2"
+  | "3x3"
+  | "sidebar-left"
+  | "sidebar-right"
+  | "header-2col"
+  | "header-footer";
+
+export interface GridCell {
+  id: string;
+  row: number;
+  col: number;
+  rowSpan: number;
+  colSpan: number;
+  occupied: boolean;
+  elementId?: string;
+}
+
+export interface GridLayout {
+  id: string;
+  name: string;
+  type: GridLayoutType;
+  rows: number;
+  cols: number;
+  cells: GridCell[];
+}
+
 export interface Page {
   id: string;
   name: string;
@@ -117,6 +161,8 @@ export interface Page {
     fadeIn?: { duration: number };
     fadeOut?: { duration: number };
   };
+  gridLayout?: GridLayout | null;
+  gridMode?: boolean;
 }
 
 export interface Resource {
@@ -177,6 +223,11 @@ export interface EditorActions {
   setSelectedElement: (elementId: string | null) => void;
   duplicateElement: (pageId: string, elementId: string) => void;
   splitElement: (pageId: string, elementId: string, time: number) => void;
+  moveElementToPage: (
+    sourcePageId: string,
+    targetPageId: string,
+    elementId: string,
+  ) => void;
 
   // Resource actions
   addResource: (resource: Resource) => void;
@@ -189,6 +240,15 @@ export interface EditorActions {
   // Tab actions
   setActiveLeftTab: (tab: "upload" | "elements" | "live") => void;
   setActiveResourceTab: (tab: "all" | "image" | "video" | "audio") => void;
+
+  // Grid layout actions
+  setGridMode: (pageId: string, enabled: boolean) => void;
+  setPageGridLayout: (pageId: string, layout: GridLayout | null) => void;
+  updateGridCell: (
+    pageId: string,
+    cellId: string,
+    updates: Partial<GridCell>,
+  ) => void;
 
   // API Integration
   fetchProject: (projectId: string) => Promise<void>;

@@ -9,9 +9,12 @@ import {
   Minus,
   ZoomIn,
   ZoomOut,
+  Copy,
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 import { resumeAudioContextOnGesture } from "@/lib/audioContext";
+
+const generateElementId = () => `el-${Math.random().toString(36).substr(2, 9)}`;
 
 export function Timeline({ className }: { className?: string }) {
   const {
@@ -24,13 +27,61 @@ export function Timeline({ className }: { className?: string }) {
     selectedElementId,
     setSelectedElement,
     updateElement,
+    addElement,
     timelineZoom,
     setTimelineZoom,
+    addPage,
+    deletePage,
+    updatePage,
+    setCurrentPage,
+    moveElementToPage,
+    duplicatePage,
+    reorderPages,
   } = useEditorStore();
+
+  const [editingPageId, setEditingPageId] = React.useState<string | null>(null);
+  const [editingPageValue, setEditingPageValue] = React.useState("");
+
+  const handleRenameSubmit = (pageId: string) => {
+    if (editingPageValue.trim()) {
+      updatePage(pageId, { name: editingPageValue.trim() });
+    }
+    setEditingPageId(null);
+  };
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const PX_PER_SEC = timelineZoom;
   const HEADER_WIDTH = 120;
+
+  const getAssetUrl = (url?: string) => {
+    if (!url) return "";
+    if (
+      url.startsWith("http") ||
+      url.startsWith("data:") ||
+      url.startsWith("blob:")
+    )
+      return url;
+    return `http://localhost:3001${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
+  const getMediaDuration = (
+    url: string,
+    type: "video" | "audio",
+  ): Promise<number> =>
+    new Promise((resolve) => {
+      const media = document.createElement(type);
+      media.crossOrigin = "anonymous";
+      media.src = url;
+      const timeout = setTimeout(() => resolve(5), 2000);
+      media.onloadedmetadata = () => {
+        clearTimeout(timeout);
+        resolve(media.duration || 5);
+      };
+      media.onerror = () => {
+        clearTimeout(timeout);
+        resolve(5);
+      };
+    });
 
   const currentPage = pages.find((p) => p.id === currentPageId);
   const elements = currentPage?.elements || [];
@@ -139,7 +190,10 @@ export function Timeline({ className }: { className?: string }) {
 
       // When seeking during playback, update playback start so playhead stays where user clicked
       if (useEditorStore.getState().isPlaying) {
-        playbackStartRef.current = { time: performance.now(), position: newPos };
+        playbackStartRef.current = {
+          time: performance.now(),
+          position: newPos,
+        };
       }
     },
     [PX_PER_SEC, setTimelinePosition],
@@ -171,6 +225,89 @@ export function Timeline({ className }: { className?: string }) {
   }, [isScrubbing, handleScrub]);
 
   const tracksScrollRef = React.useRef<HTMLDivElement>(null);
+
+  const handleTimelineDrop = React.useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const raw = e.dataTransfer.getData("application/json");
+        if (!raw) return;
+        const asset = JSON.parse(raw);
+        if (!currentPageId) return;
+
+        const scrollEl = tracksScrollRef.current;
+        if (!scrollEl) return;
+        const rect = scrollEl.getBoundingClientRect();
+        const scrollLeft = scrollEl.scrollLeft;
+        const dropX = e.clientX - rect.left + scrollLeft - HEADER_WIDTH;
+        const startTime = Math.max(0, dropX / PX_PER_SEC);
+
+        const assetSrc = getAssetUrl(asset.url || asset.src);
+        let duration = 5;
+        if (asset.type === "video" || asset.type === "audio") {
+          duration = await getMediaDuration(assetSrc, asset.type);
+        } else if (asset.type === "image") {
+          duration = 10;
+        }
+
+        const id = generateElementId();
+        const newElement: any = {
+          id,
+          type: asset.type,
+          name: asset.name || asset.label,
+          position: { x: 100, y: 100 },
+          size: { width: 200, height: 150 },
+          duration,
+          startTime,
+          freePosition: true,
+          opacity: 100,
+          layer: (currentPage?.elements.length || 0) + 1,
+        };
+
+        const elements = currentPage?.elements || [];
+        const hasVisuals = elements.some(
+          (el) => el.type === "image" || el.type === "video",
+        );
+        const defaultFill = hasVisuals ? "fill" : "fit";
+
+        if (asset.type === "image") {
+          newElement.src = asset.url || asset.src;
+          newElement.fill = defaultFill;
+          newElement.size = { width: 400, height: 300 };
+        } else if (asset.type === "video") {
+          newElement.src = asset.url || asset.src;
+          newElement.thumbnail = asset.thumbnail;
+          newElement.volume = 75;
+          newElement.fill = defaultFill;
+          newElement.size = { width: 320, height: 180 };
+          newElement.naturalDuration = duration;
+        } else if (asset.type === "shape") {
+          newElement.shapeType = asset.name;
+          newElement.color = asset.color || "#3b82f6";
+          newElement.size = { width: 100, height: 100 };
+        } else if (asset.type === "text") {
+          const fs = asset.fontSize || 32;
+          newElement.content = asset.content || "Double click to edit";
+          newElement.fontSize = fs;
+          newElement.fontWeight = asset.fontWeight || "bold";
+          newElement.color = asset.color || "#ffffff";
+          newElement.backgroundColor = asset.backgroundColor || "transparent";
+          newElement.size = { width: 400, height: Math.max(60, fs * 1.4) };
+        } else if (asset.type === "audio") {
+          newElement.src = asset.url || asset.src;
+          newElement.volume = 100;
+          newElement.size = { width: 150, height: 60 };
+          newElement.naturalDuration = duration;
+        }
+
+        addElement(currentPageId, newElement);
+      } catch (err) {
+        console.error("Timeline drop failed:", err);
+      }
+    },
+    [currentPageId, addElement, PX_PER_SEC],
+  );
 
   // Auto-scroll to playhead during playback
   React.useEffect(() => {
@@ -361,7 +498,10 @@ export function Timeline({ className }: { className?: string }) {
       const newPos = Math.max(0, Math.min(position, projectDuration));
       setTimelinePosition(newPos);
       if (useEditorStore.getState().isPlaying) {
-        playbackStartRef.current = { time: performance.now(), position: newPos };
+        playbackStartRef.current = {
+          time: performance.now(),
+          position: newPos,
+        };
       }
     },
     [projectDuration, setTimelinePosition],
@@ -427,6 +567,43 @@ export function Timeline({ className }: { className?: string }) {
           </div>
         </div>
 
+        {/* Relocated Info Bar */}
+        <div className="flex items-center gap-6 text-[10px] font-bold">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-md border border-white/5">
+            <span className="text-accent uppercase tracking-tighter opacity-70">
+              Size
+            </span>
+            <span className="text-text-main tabular-nums">
+              {(() => {
+                const l = currentPage?.layout || "16:9";
+                if (l === "1:1") return "1080X1080";
+                if (l === "16:9") return "1920X1080";
+                if (l === "9:16") return "1080X1920";
+                if (l === "4:5") return "1080X1350";
+                if (l === "2:3") return "1080X1620";
+                return "1920X1080";
+              })()}
+            </span>
+            <span className="text-white/10 mx-1">|</span>
+            <span className="text-text-muted capitalize">
+              {currentPage?.layout || "16:9"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-md border border-white/5">
+            <span className="text-accent uppercase tracking-tighter opacity-70">
+              Time
+            </span>
+            <div className="flex items-center gap-1 text-text-main tabular-nums">
+              <span>{formatTime(timelinePosition)}</span>
+              <span className="text-text-muted/30">/</span>
+              <span className="text-text-muted">
+                {formatTime(projectDuration)}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div className="flex items-center gap-4 border-l border-border pl-4">
           <div className="flex items-center gap-3">
             <button
@@ -455,6 +632,11 @@ export function Timeline({ className }: { className?: string }) {
       <div
         ref={tracksScrollRef}
         className="flex-1 overflow-x-auto overflow-y-auto no-scrollbar relative z-10 transition-all bg-[#111114]"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={handleTimelineDrop}
       >
         <div
           className="flex flex-col relative"
@@ -609,6 +791,119 @@ export function Timeline({ className }: { className?: string }) {
           >
             <div className="w-3 h-3 bg-white rounded-xs rotate-45 -translate-x-1/2 -mt-1.5 shadow-lg border border-black/20" />
           </div>
+        </div>
+      </div>
+
+      {/* Layout Tabs Bar - Bottom Area */}
+      <div className="h-10 bg-[#1A1A1E] border-t border-border flex items-center px-4 gap-2">
+        <div className="flex items-center bg-[#111114] rounded-md p-0.5 border border-border/50">
+          {pages.map((page, index) => (
+            <div
+              key={page.id}
+              data-page-tab-id={page.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  "application/json",
+                  JSON.stringify({ type: "page-tab", index, pageId: page.id }),
+                );
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onClick={() => setCurrentPage(page.id)}
+              onDoubleClick={() => {
+                setEditingPageId(page.id);
+                setEditingPageValue(page.name || `LAYOUT ${index + 1}`);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const raw = e.dataTransfer.getData("application/json");
+                if (raw) {
+                  const data = JSON.parse(raw);
+                  if (data.type === "canvas-element" && data.elementId) {
+                    moveElementToPage(data.pageId, page.id, data.elementId);
+                  } else if (data.type === "page-tab") {
+                    reorderPages(data.index, index);
+                  }
+                }
+              }}
+              className={cn(
+                "group relative px-4 py-1 rounded-sm text-[11px] font-bold cursor-pointer transition-all flex items-center gap-2",
+                currentPageId === page.id
+                  ? "bg-accent text-accent-foreground shadow-sm"
+                  : "text-text-muted hover:text-text-main hover:bg-white/5",
+              )}
+            >
+              {editingPageId === page.id ? (
+                <input
+                  autoFocus
+                  className="bg-black/20 text-white outline-none px-1 rounded border border-white/20 w-32 uppercase"
+                  value={editingPageValue}
+                  onChange={(e) => setEditingPageValue(e.target.value)}
+                  onBlur={() => handleRenameSubmit(page.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRenameSubmit(page.id);
+                    if (e.key === "Escape") setEditingPageId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="uppercase whitespace-nowrap">
+                  {page.name || `LAYOUT ${index + 1}`}
+                </span>
+              )}
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  duplicatePage(page.id);
+                }}
+                title="Duplicate Layout"
+                className={cn(
+                  "w-5 h-5 rounded flex items-center justify-center transition-all opacity-0 group-hover:opacity-100",
+                  currentPageId === page.id
+                    ? "hover:bg-white/20 text-white"
+                    : "hover:bg-white/10 text-text-muted hover:text-text-main",
+                )}
+              >
+                <Copy size={10} />
+              </button>
+
+              {pages.length > 1 && !editingPageId && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deletePage(page.id);
+                  }}
+                  className={cn(
+                    "w-3 h-3 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100",
+                    currentPageId === page.id
+                      ? "hover:bg-white/20"
+                      : "hover:bg-white/10",
+                  )}
+                >
+                  <Minus size={10} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={addPage}
+          className="w-7 h-7 flex items-center justify-center rounded-md bg-white/5 border border-border/50 text-text-muted hover:text-text-main hover:bg-white/10 transition-all active:scale-95"
+          title="Add New Layout"
+        >
+          <Plus size={14} />
+        </button>
+
+        <div className="flex-1" />
+
+        <div className="text-[10px] text-text-muted font-bold uppercase tracking-wider hidden md:block">
+          {pages.length} Layout{pages.length !== 1 ? "s" : ""} in project
         </div>
       </div>
     </div>

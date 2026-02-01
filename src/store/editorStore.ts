@@ -14,6 +14,7 @@ interface EditorState extends EditorStore {
   clipboard: Element | null;
   copyElement: (elementId: string) => void;
   pasteElement: () => void;
+  reorderPages: (startIndex: number, endIndex: number) => void;
 }
 
 // Sample resources and pages are now empty by default as requested.
@@ -187,7 +188,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       set({ pages: newPages, currentPageId: newPage.id });
     }
   },
-
   deletePage: (pageId) => {
     const pages = get().pages;
     if (pages.length > 1) {
@@ -200,6 +200,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           currentPageId === pageId ? newPages[0].id : currentPageId,
       });
     }
+  },
+
+  reorderPages: (startIndex, endIndex) => {
+    get().pushHistory();
+    const pages = [...get().pages];
+    const [removed] = pages.splice(startIndex, 1);
+    pages.splice(endIndex, 0, removed);
+    set({ pages });
   },
 
   setCurrentPage: (pageId) =>
@@ -254,6 +262,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedElementId:
         state.selectedElementId === elementId ? null : state.selectedElementId,
     }));
+  },
+
+  moveElementToPage: (sourcePageId, targetPageId, elementId) => {
+    if (sourcePageId === targetPageId) return;
+    get().pushHistory();
+    const { pages } = get();
+    const sourcePage = pages.find((p) => p.id === sourcePageId);
+    const element = sourcePage?.elements.find((el) => el.id === elementId);
+
+    if (sourcePage && element) {
+      set((state) => ({
+        pages: state.pages.map((p) => {
+          if (p.id === sourcePageId) {
+            return {
+              ...p,
+              elements: p.elements.filter((el) => el.id !== elementId),
+            };
+          }
+          if (p.id === targetPageId) {
+            return {
+              ...p,
+              elements: [...p.elements, element],
+            };
+          }
+          return p;
+        }),
+        currentPageId: targetPageId,
+        selectedElementId: elementId,
+      }));
+    }
   },
 
   setSelectedElement: (elementId) => set({ selectedElementId: elementId }),
@@ -370,6 +408,43 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setActiveLeftTab: (tab) => set({ activeLeftTab: tab }),
   setActiveResourceTab: (tab) => set({ activeResourceTab: tab }),
 
+  // Grid layout actions
+  setGridMode: (pageId, enabled) => {
+    get().pushHistory();
+    set((state) => ({
+      pages: state.pages.map((p) =>
+        p.id === pageId ? { ...p, gridMode: enabled } : p,
+      ),
+    }));
+  },
+
+  setPageGridLayout: (pageId, layout) => {
+    get().pushHistory();
+    set((state) => ({
+      pages: state.pages.map((p) =>
+        p.id === pageId ? { ...p, gridLayout: layout } : p,
+      ),
+    }));
+  },
+
+  updateGridCell: (pageId, cellId, updates) => {
+    set((state) => ({
+      pages: state.pages.map((p) =>
+        p.id === pageId && p.gridLayout
+          ? {
+              ...p,
+              gridLayout: {
+                ...p.gridLayout,
+                cells: p.gridLayout.cells.map((cell) =>
+                  cell.id === cellId ? { ...cell, ...updates } : cell,
+                ),
+              },
+            }
+          : p,
+      ),
+    }));
+  },
+
   // API Integration
   fetchProject: async (projectId: string) => {
     set({ saveStatus: "loading" });
@@ -435,6 +510,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             duration: p.duration,
             backgroundColor: p.backgroundColor,
             layout: p.layout,
+            gridMode: p.gridMode,
+            gridLayout: p.gridLayout,
             elements: p.elements.map((el) => ({
               id: el.id,
               type: el.type,
