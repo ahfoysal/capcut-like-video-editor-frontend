@@ -2,11 +2,15 @@ import { create } from "zustand";
 import { EditorStore, Page, Element } from "@/types/editor";
 import { generateId } from "@/lib/utils";
 
-export type ViewMode = "empty" | "template" | "editor";
+export type ViewMode = "empty" | "template" | "editor" | "home";
 
 interface EditorState extends EditorStore {
+  playbackTimeRef: { current: number };
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
+  allProjects: any[];
+  fetchAllProjects: () => Promise<void>;
+  deleteProjectById: (id: string) => Promise<void>;
   clipboard: Element | null;
   copyElement: (elementId: string) => void;
   pasteElement: () => void;
@@ -28,8 +32,9 @@ const initialPages: Page[] = [
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   // Initial state
-  viewMode: "editor", // Changed from empty to editor
+  viewMode: "home", // Start at home
   setViewMode: (mode) => set({ viewMode: mode }),
+  allProjects: [],
   projectName: "Untitled Project",
   projectDate: "2026-01-31", // Static default for hydration
   pages: initialPages,
@@ -38,6 +43,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   resources: [],
   zoom: 60,
   timelinePosition: 0,
+  /** Mutable ref updated every frame during playback; audio reads this to avoid React re-renders. */
+  playbackTimeRef: { current: 0 },
   timelineZoom: 50, // Added timelineZoom with default value
   isPlaying: false,
   isDarkMode: false,
@@ -128,7 +135,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   setTimelineZoom: (zoom) =>
-    set({ timelineZoom: Math.max(10, Math.min(200, zoom)) }),
+    set({ timelineZoom: Math.max(1, Math.min(200, zoom)) }),
 
   toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
 
@@ -301,10 +308,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({ resources: [...state.resources, resource] }));
   },
 
-  deleteResource: (resourceId) => {
-    set((state) => ({
-      resources: state.resources.filter((r) => r.id !== resourceId),
-    }));
+  deleteResource: async (resourceId: string) => {
+    try {
+      const response = await fetch(
+        `http://localhost:3001/assets/${resourceId}`,
+        {
+          method: "DELETE",
+        },
+      );
+      if (!response.ok) throw new Error("Failed to delete asset");
+
+      set((state) => ({
+        resources: state.resources.filter((r) => r.id !== resourceId),
+      }));
+    } catch (error) {
+      console.error("Error deleting asset:", error);
+      throw error;
+    }
   },
 
   // Clipboard actions
@@ -335,12 +355,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   // Playback actions
   setTimelinePosition: (positionOrUpdater) =>
-    set((state) => ({
-      timelinePosition:
+    set((state) => {
+      const next =
         typeof positionOrUpdater === "function"
           ? positionOrUpdater(state.timelinePosition)
-          : positionOrUpdater,
-    })),
+          : positionOrUpdater;
+      state.playbackTimeRef.current = next;
+      return { timelinePosition: next };
+    }),
 
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
 
@@ -359,14 +381,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const project = await response.json();
 
       // Transform backend elements (properties JSON) to frontend elements if needed
-      // Currently, we'll assume they match or we handle them gracefully
+      // Map over pages and elements to merge properties and convert units
+      const normalizedPages = (project.pages || []).map((page: any) => ({
+        ...page,
+        elements: (page.elements || []).map((el: any) => ({
+          ...el,
+          ...(el.properties || {}),
+          id: el.id, // Ensure id and type are preserved from top level
+          type: el.type,
+          startTime: el.startTime / 1000,
+          duration: el.duration / 1000,
+        })),
+      }));
+
       set({
         projectId: project.id,
         projectName: project.name,
-        pages: project.pages || [],
-        currentPageId: project.pages?.[0]?.id || null,
+        pages: normalizedPages,
+        currentPageId: normalizedPages[0]?.id || null,
         viewMode: "editor",
         saveStatus: "saved",
+        isPlaying: false, // Ensure playback is paused when loading a project
+        timelinePosition: 0, // Reset timeline to start
       });
     } catch (error) {
       console.error("Error fetching project:", error);
@@ -374,9 +410,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
+  setSaveStatus: (status: "idle" | "saving" | "saved" | "error" | "loading") =>
+    set({ saveStatus: status }),
+
   saveProject: async () => {
-    const { projectId, projectName, pages, saveStatus } = get();
-    if (saveStatus === "saving") return;
+    const { projectId, projectName, pages } = get();
 
     set({ saveStatus: "saving" });
     try {
@@ -422,30 +460,57 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
+  fetchAllProjects: async () => {
+    try {
+      const response = await fetch("http://localhost:3001/projects");
+      if (!response.ok) throw new Error("Failed to fetch projects");
+      const data = await response.json();
+      set({ allProjects: data });
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+    }
+  },
+
+  deleteProjectById: async (id: string) => {
+    try {
+      const response = await fetch(`http://localhost:3001/projects/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete project");
+      await get().fetchAllProjects();
+      if (get().projectId === id) {
+        get().resetProject();
+        set({ viewMode: "home" });
+      }
+    } catch (error) {
+      console.error("Error deleting project:", error);
+    }
+  },
+
   uploadAsset: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const response = await fetch(`http://localhost:3001/assets/upload`, {
+      const response = await fetch("http://localhost:3001/assets/upload", {
         method: "POST",
         body: formData,
       });
-      if (!response.ok) throw new Error("Failed to upload asset");
+      if (!response.ok) throw new Error("Upload failed");
       const newAsset = await response.json();
-      console.log("Asset uploaded successfully");
-
-      // Add to store immediately
       const resource = {
         id: newAsset.id,
         type: newAsset.type,
         name: newAsset.name,
         src: newAsset.url,
+        thumbnail: newAsset.thumbnail,
       };
-      get().addResource(resource);
 
-      return newAsset;
+      set((state) => ({
+        resources: [resource, ...state.resources],
+      }));
+      return resource;
     } catch (error) {
-      console.error("Error uploading asset:", error);
+      console.error("Failed to upload asset:", error);
       throw error;
     }
   },

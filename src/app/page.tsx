@@ -8,12 +8,21 @@ import { useEditorStore } from "@/store/editorStore";
 import { Timeline } from "@/components/Timeline";
 import { EditorCanvas } from "@/components/EditorCanvas";
 import { PropertiesPanel } from "@/components/PropertiesPanel";
+import { ProjectList } from "@/components/ProjectList";
+import { useAutoSave } from "@/hooks/useAutoSave";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<
     "upload" | "elements" | "text" | "media" | "live" | "more" | "layers"
   >("upload");
   const viewMode = useEditorStore((state) => state.viewMode);
+
+  // Enable Auto-Save
+  useAutoSave(2000);
+
+  if (viewMode === "home") {
+    return <ProjectList />;
+  }
 
   if (viewMode === "empty") {
     return <EmptyState />;
@@ -36,7 +45,7 @@ export default function Home() {
 
         {/* Canvas Area */}
         <div className="flex-1 bg-[#111114] relative flex items-center justify-center overflow-hidden">
-          <EditorCanvas isEmpty={false} />
+          <EditorCanvas />
         </div>
 
         {/* Properties Panel */}

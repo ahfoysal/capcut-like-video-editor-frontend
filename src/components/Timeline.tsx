@@ -11,6 +11,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
+import { resumeAudioContextOnGesture } from "@/lib/audioContext";
 
 export function Timeline({ className }: { className?: string }) {
   const {
@@ -35,9 +36,12 @@ export function Timeline({ className }: { className?: string }) {
   const elements = currentPage?.elements || [];
 
   // Calculate project duration based on the last element's end time
-  const totalDuration = elements.reduce((max, el) => {
+  const projectDuration = elements.reduce((max, el) => {
     return Math.max(max, el.startTime + el.duration);
   }, 0);
+
+  // Buffer duration for the timeline
+  const totalDuration = Math.max(projectDuration + 2, 10); // Small buffer, min 10s
 
   // Group elements by type for merged tracks
   const visualElements = elements.filter(
@@ -71,13 +75,75 @@ export function Timeline({ className }: { className?: string }) {
     },
   ];
 
-  const handleScrub = (e: React.MouseEvent) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left - HEADER_WIDTH;
-    const newPos = Math.max(0, x / PX_PER_SEC);
-    setTimelinePosition(newPos);
+  // Dynamic Scale Logic
+  const getScaleConfig = () => {
+    const pixelsPerSec = PX_PER_SEC;
+    const minSpacing = 80; // Minimum pixels between major labels
+
+    // "Nice" intervals for time (in seconds)
+    const candidates = [
+      0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 3600,
+    ];
+
+    // Find the smallest candidate that results in spacing >= minSpacing
+    let major = candidates[candidates.length - 1];
+    for (const c of candidates) {
+      if (c * pixelsPerSec >= minSpacing) {
+        major = c;
+        break;
+      }
+    }
+
+    // Determine minor interval based on major
+    let minor = major / 5;
+    if (major === 0.2) minor = 0.1;
+    if (major === 0.5) minor = 0.1;
+    if (major === 2) minor = 0.5;
+    if (major === 15) minor = 5;
+    if (major === 30) minor = 10;
+    if (major === 60) minor = 15;
+    if (major >= 120) minor = 60;
+
+    return {
+      major,
+      minor,
+      label: (i: number) => {
+        if (i === 0) return "0s";
+        if (i < 60) return `${i}s`;
+        const mins = Math.floor(i / 60);
+        const secs = i % 60;
+        return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`;
+      },
+    };
   };
+
+  const scaleConfig = getScaleConfig();
+
+  // Wall-clock playback ref — must be declared before handleScrub so we can update it on seek
+  const playbackStartRef = React.useRef<{
+    time: number;
+    position: number;
+  } | null>(null);
+
+  const handleScrub = React.useCallback(
+    (e: React.MouseEvent | MouseEvent) => {
+      if (!containerRef.current || !tracksScrollRef.current) return;
+      const scrollEl = tracksScrollRef.current;
+      const rect = scrollEl.getBoundingClientRect();
+
+      const scrollLeft = scrollEl.scrollLeft;
+      const clickX = e.clientX - rect.left + scrollLeft - HEADER_WIDTH;
+
+      const newPos = Math.max(0, clickX / PX_PER_SEC);
+      setTimelinePosition(newPos);
+
+      // When seeking during playback, update playback start so playhead stays where user clicked
+      if (useEditorStore.getState().isPlaying) {
+        playbackStartRef.current = { time: performance.now(), position: newPos };
+      }
+    },
+    [PX_PER_SEC, setTimelinePosition],
+  );
 
   const [isScrubbing, setIsScrubbing] = React.useState(false);
 
@@ -89,11 +155,7 @@ export function Timeline({ className }: { className?: string }) {
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isScrubbing) {
-        if (!containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left - HEADER_WIDTH;
-        const newPos = Math.max(0, x / PX_PER_SEC);
-        setTimelinePosition(newPos);
+        handleScrub(e);
       }
     };
     const handleMouseUp = () => setIsScrubbing(false);
@@ -106,7 +168,7 @@ export function Timeline({ className }: { className?: string }) {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isScrubbing, setTimelinePosition, PX_PER_SEC]);
+  }, [isScrubbing, handleScrub]);
 
   const tracksScrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -115,16 +177,40 @@ export function Timeline({ className }: { className?: string }) {
     if (isPlaying && tracksScrollRef.current) {
       const scrollEl = tracksScrollRef.current;
       const playheadX = timelinePosition * PX_PER_SEC;
-      const viewWidth = scrollEl.clientWidth;
+      const viewWidth = scrollEl.clientWidth - HEADER_WIDTH;
       const currentScroll = scrollEl.scrollLeft;
 
       if (playheadX > currentScroll + viewWidth - 100) {
-        scrollEl.scrollLeft = playheadX - viewWidth + 200;
+        const targetScroll = playheadX - viewWidth + 200;
+        scrollEl.scrollLeft = targetScroll;
       } else if (playheadX < currentScroll) {
-        scrollEl.scrollLeft = Math.max(0, playheadX - 100);
+        const targetScroll = Math.max(0, playheadX - 100);
+        scrollEl.scrollLeft = targetScroll;
       }
     }
   }, [isPlaying, timelinePosition, PX_PER_SEC]);
+
+  // Track last auto-zoomed duration to avoid interfering with manual zoom
+  const lastAutoZoomedDuration = React.useRef(0);
+
+  // Auto-adjust zoom when project duration changes significantly
+  React.useEffect(() => {
+    if (projectDuration > 0 && tracksScrollRef.current) {
+      // Only auto-zoom if duration changed significantly (more than 1 second)
+      if (Math.abs(projectDuration - lastAutoZoomedDuration.current) > 1) {
+        const viewWidth = tracksScrollRef.current.clientWidth - HEADER_WIDTH;
+
+        // Target: fit the entire duration in 90% of the viewport
+        const targetZoom = (viewWidth * 0.9) / projectDuration;
+
+        // Only set upper limit, allow very small zooms for long videos
+        const clampedZoom = Math.min(200, targetZoom);
+
+        setTimelineZoom(clampedZoom);
+        lastAutoZoomedDuration.current = projectDuration;
+      }
+    }
+  }, [projectDuration, setTimelineZoom]); // Removed timelineZoom from dependencies
 
   const [timelineDrag, setTimelineDrag] = React.useState<{
     id: string;
@@ -164,10 +250,11 @@ export function Timeline({ className }: { className?: string }) {
           // Auto-scroll when dragging near edges
           if (tracksScrollRef.current) {
             const scrollEl = tracksScrollRef.current;
-            const mouseX = e.clientX - scrollEl.getBoundingClientRect().left;
+            const rect = scrollEl.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
             if (mouseX > scrollEl.clientWidth - 50) {
               scrollEl.scrollLeft += 10;
-            } else if (mouseX < 50) {
+            } else if (mouseX < HEADER_WIDTH + 50) {
               scrollEl.scrollLeft -= 10;
             }
           }
@@ -208,28 +295,46 @@ export function Timeline({ className }: { className?: string }) {
     };
   }, [timelineDrag, currentPageId, updateElement, PX_PER_SEC]);
 
+  // Sync playback start when play is pressed
+  React.useEffect(() => {
+    if (isPlaying) {
+      playbackStartRef.current = {
+        time: performance.now(),
+        position: useEditorStore.getState().timelinePosition,
+      };
+    } else {
+      playbackStartRef.current = null;
+    }
+  }, [isPlaying]);
+
+  // Throttle React updates so audio isn't hammered by 60fps re-renders
+  const lastSetTimeRef = React.useRef(0);
+  const THROTTLE_MS = 50; // ~20fps for UI; ref updated every frame for smoother playback
+
   React.useEffect(() => {
     let animationFrame: number;
-    let lastTime: number | null = null;
+    const store = useEditorStore.getState();
 
-    const animate = (time: number) => {
-      if (lastTime === null) {
-        lastTime = time;
-      }
-      const deltaTime = (time - lastTime) / 1000;
-      lastTime = time;
+    const animate = () => {
+      const start = playbackStartRef.current;
+      if (!start) return;
 
-      if (isPlaying) {
-        setTimelinePosition((prev) => {
-          const next = prev + deltaTime;
-          if (next >= totalDuration) {
-            togglePlay();
-            return totalDuration;
-          }
-          return next;
-        });
-        animationFrame = requestAnimationFrame(animate);
+      const elapsed = (performance.now() - start.time) / 1000;
+      const next = start.position + elapsed;
+
+      store.playbackTimeRef.current = next;
+
+      if (next >= projectDuration) {
+        setTimelinePosition(projectDuration);
+        togglePlay();
+        return;
       }
+      const now = performance.now();
+      if (now - lastSetTimeRef.current >= THROTTLE_MS) {
+        lastSetTimeRef.current = now;
+        setTimelinePosition(next);
+      }
+      animationFrame = requestAnimationFrame(animate);
     };
 
     if (isPlaying) {
@@ -239,7 +344,7 @@ export function Timeline({ className }: { className?: string }) {
     return () => {
       if (animationFrame) cancelAnimationFrame(animationFrame);
     };
-  }, [isPlaying, totalDuration, togglePlay, setTimelinePosition]);
+  }, [isPlaying, projectDuration, togglePlay, setTimelinePosition]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -250,8 +355,21 @@ export function Timeline({ className }: { className?: string }) {
       .padStart(2, "0")}:${ms}0`;
   };
 
+  // Seek to position; when playing, update playback start so playhead stays there
+  const seekTo = React.useCallback(
+    (position: number) => {
+      const newPos = Math.max(0, Math.min(position, projectDuration));
+      setTimelinePosition(newPos);
+      if (useEditorStore.getState().isPlaying) {
+        playbackStartRef.current = { time: performance.now(), position: newPos };
+      }
+    },
+    [projectDuration, setTimelinePosition],
+  );
+
   return (
     <div
+      ref={containerRef}
       className={cn("bg-bg-panel flex flex-col h-full select-none", className)}
     >
       {/* Timeline Controls */}
@@ -263,16 +381,14 @@ export function Timeline({ className }: { className?: string }) {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setTimelinePosition(0)}
+              onClick={() => seekTo(0)}
               title="Skip to Beginning"
               className="p-2 hover:bg-white/5 rounded-full transition-colors text-text-muted hover:text-text-main"
             >
               <SkipBack size={18} />
             </button>
             <button
-              onClick={() =>
-                setTimelinePosition(Math.max(0, timelinePosition - 1))
-              }
+              onClick={() => seekTo(timelinePosition - 1)}
               title="Jump Back (1s)"
               className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-text-muted/50 hover:text-text-main"
             >
@@ -280,8 +396,9 @@ export function Timeline({ className }: { className?: string }) {
             </button>
             <button
               onClick={() => {
-                if (!isPlaying && timelinePosition >= totalDuration - 0.01) {
-                  setTimelinePosition(0);
+                resumeAudioContextOnGesture();
+                if (!isPlaying && timelinePosition >= projectDuration - 0.01) {
+                  seekTo(0);
                 }
                 togglePlay();
               }}
@@ -294,14 +411,14 @@ export function Timeline({ className }: { className?: string }) {
               )}
             </button>
             <button
-              onClick={() => setTimelinePosition(timelinePosition + 1)}
+              onClick={() => seekTo(timelinePosition + 1)}
               title="Jump Forward (1s)"
               className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-text-muted/50 hover:text-text-main"
             >
               <Plus size={14} />
             </button>
             <button
-              onClick={() => setTimelinePosition(totalDuration)}
+              onClick={() => seekTo(projectDuration)}
               title="Skip to End"
               className="p-2 hover:bg-white/5 rounded-full transition-colors text-text-muted hover:text-text-main"
             >
@@ -339,35 +456,49 @@ export function Timeline({ className }: { className?: string }) {
         ref={tracksScrollRef}
         className="flex-1 overflow-x-auto overflow-y-auto no-scrollbar relative z-10 transition-all bg-[#111114]"
       >
-        {/* Timeline Ruler inside scrollable area to sync with tracks */}
-        <div
-          className="sticky top-0 h-8 border-b border-border bg-bg-panel flex items-center z-30 cursor-crosshair ml-30"
-          onMouseDown={onRulerMouseDown}
-        >
-          <div
-            className="flex"
-            style={{ width: Math.max(1250, (totalDuration + 10) * PX_PER_SEC) }}
-          >
-            {Array.from({ length: Math.ceil(totalDuration) + 10 }).map(
-              (_, i) => (
-                <div
-                  key={i}
-                  className="border-l border-border/50 h-3 flex items-end pb-1 px-1 shrink-0"
-                  style={{ width: PX_PER_SEC }}
-                >
-                  <span className="text-[9px] font-bold text-text-muted/60 font-mono">
-                    {i}s
-                  </span>
-                </div>
-              ),
-            )}
-          </div>
-        </div>
-
         <div
           className="flex flex-col relative"
-          style={{ width: Math.max(1250, (totalDuration + 10) * PX_PER_SEC) }}
+          style={{ width: HEADER_WIDTH + totalDuration * PX_PER_SEC }}
         >
+          {/* Timeline Ruler */}
+          <div
+            className="sticky top-0 h-8 border-b border-border bg-bg-panel flex items-center z-30 cursor-crosshair"
+            onMouseDown={onRulerMouseDown}
+            style={{ marginLeft: HEADER_WIDTH }}
+          >
+            {Array.from({
+              length: Math.ceil(totalDuration / scaleConfig.major) + 1,
+            }).map((_, i) => {
+              const time = i * scaleConfig.major;
+              return (
+                <div
+                  key={time}
+                  className="absolute border-l border-border/50 h-3 flex items-end pb-1 px-1 shrink-0"
+                  style={{ left: time * PX_PER_SEC }}
+                >
+                  <span className="text-[9px] font-bold text-text-muted/60 font-mono whitespace-nowrap">
+                    {scaleConfig.label(time)}
+                  </span>
+                </div>
+              );
+            })}
+            {/* Minor ticks */}
+            {PX_PER_SEC > 5 &&
+              Array.from({
+                length: Math.ceil(totalDuration / scaleConfig.minor) + 1,
+              }).map((_, i) => {
+                const time = i * scaleConfig.minor;
+                if (time % scaleConfig.major === 0) return null;
+                return (
+                  <div
+                    key={`minor-${time}`}
+                    className="absolute border-l border-border/20 h-1.5"
+                    style={{ left: time * PX_PER_SEC }}
+                  />
+                );
+              })}
+          </div>
+
           {tracks.map((track) => {
             const sorted = [...track.items].sort(
               (a, b) => a.startTime - b.startTime,
@@ -403,6 +534,17 @@ export function Timeline({ className }: { className?: string }) {
                   {track.label}
                 </div>
                 <div className="relative h-full py-1.5 bg-black/5">
+                  {/* Vertical grid lines */}
+                  {Array.from({
+                    length: Math.ceil(totalDuration / scaleConfig.major) + 1,
+                  }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="absolute top-0 bottom-0 border-l border-white/[0.02] pointer-events-none"
+                      style={{ left: i * scaleConfig.major * PX_PER_SEC }}
+                    />
+                  ))}
+
                   {rows.map((row, rowIndex) => (
                     <React.Fragment key={rowIndex}>
                       {row.map((element) => (
@@ -461,7 +603,7 @@ export function Timeline({ className }: { className?: string }) {
           <div
             className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none transition-none shadow-[0_0_8px_rgba(255,255,255,0.5)]"
             style={{
-              left: 120 + timelinePosition * PX_PER_SEC,
+              left: HEADER_WIDTH + timelinePosition * PX_PER_SEC,
               height: "100%",
             }}
           >

@@ -1,4 +1,4 @@
-export type LayoutType = "1:1" | "1:1-v" | "2:1-h" | "1:2-v" | "2:1-v" | "2:2";
+export type LayoutType = "1:1" | "16:9" | "9:16" | "4:5" | "2:3";
 
 export type ElementType =
   | "image"
@@ -193,6 +193,7 @@ export interface EditorActions {
   // API Integration
   fetchProject: (projectId: string) => Promise<void>;
   fetchResources: () => Promise<void>;
+  setSaveStatus: (status: EditorState["saveStatus"]) => void;
   saveProject: () => Promise<void>;
   uploadAsset: (file: File) => Promise<any>;
 }

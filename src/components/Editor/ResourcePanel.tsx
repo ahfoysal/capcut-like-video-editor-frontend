@@ -108,7 +108,7 @@ export default function ResourcePanel() {
     };
 
     const handleDragStart = (e: React.DragEvent, resource: Resource) => {
-        e.dataTransfer.setData('resource', JSON.stringify(resource));
+        e.dataTransfer.setData('application/json', JSON.stringify(resource));
     };
 
     return (

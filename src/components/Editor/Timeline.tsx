@@ -17,6 +17,60 @@ import { useEditorStore } from '@/store/editorStore';
 import { cn, formatTimeShort } from '@/lib/utils';
 import { Element } from '@/types/editor';
 
+const getLayoutDimensions = (layout: string = "16:9") => {
+    switch (layout) {
+      case "1:1":
+        return { width: 1080, height: 1080 };
+      case "16:9":
+        return { width: 1920, height: 1080 };
+      case "9:16":
+        return { width: 1080, height: 1920 };
+      case "4:5":
+        return { width: 1080, height: 1350 };
+      case "2:3":
+        return { width: 1080, height: 1620 };
+      default:
+        return { width: 1920, height: 1080 };
+    }
+  };
+  
+  const getAssetUrl = (url?: string) => {
+    if (!url) return "";
+    if (
+      url.startsWith("http") ||
+      url.startsWith("data:") ||
+      url.startsWith("blob:")
+    )
+      return url;
+    return `http://localhost:3001${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+  
+  const getMediaDuration = (
+    url: string,
+    type: "video" | "audio"
+  ): Promise<number> => {
+    return new Promise((resolve) => {
+      const media = document.createElement(type);
+      media.crossOrigin = "anonymous";
+      media.src = url;
+  
+      const timeout = setTimeout(() => {
+        resolve(5); // Fallback to 5s if metadata takes too long
+      }, 2000);
+  
+      media.onloadedmetadata = () => {
+        clearTimeout(timeout);
+        resolve(media.duration || 5);
+      };
+  
+      media.onerror = () => {
+        clearTimeout(timeout);
+        resolve(5);
+      };
+    });
+  };
+
+
 export default function Timeline() {
     const {
         pages,
@@ -30,7 +84,8 @@ export default function Timeline() {
         setTimelinePosition,
         isPlaying,
         togglePlay,
-        isDarkMode
+        isDarkMode,
+        addElement,
     } = useEditorStore();
 
     const timelineRef = useRef<HTMLDivElement>(null);
@@ -220,6 +275,80 @@ export default function Timeline() {
                 ref={timelineRef}
                 className="relative flex-1 overflow-x-auto"
                 onClick={handleTimelineClick}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={async (e) => {
+                    e.preventDefault();
+                    try {
+                        const data = e.dataTransfer.getData("application/json");
+                        const asset = JSON.parse(data);
+                        if (!currentPageId) {
+                            console.warn("No current page ID selected");
+                            return;
+                        }
+
+                        const rect = timelineRef.current!.getBoundingClientRect();
+                        const dropX = e.clientX - rect.left + timelineRef.current!.scrollLeft;
+                        const startTime = Math.max(0, dropX / pixelsPerSecond);
+
+                        const assetSrc = getAssetUrl(asset.url || asset.src);
+                        let duration = 5;
+
+                        if (asset.type === "video" || asset.type === "audio") {
+                            duration = await getMediaDuration(assetSrc, asset.type);
+                        } else if (asset.type === "image") {
+                            duration = 10; // Default images to 10s
+                        }
+
+                        const newElement: any = {
+                            id: `el-${Date.now()}`,
+                            type: asset.type,
+                            name: asset.name || asset.label,
+                            // Default position for elements dropped on timeline - can be refined
+                            position: { x: 0, y: 0 }, 
+                            size: { width: 200, height: 150 }, // Default size
+                            duration,
+                            startTime,
+                            freePosition: false, // Timeline elements are typically positioned by time
+                            opacity: 100,
+                            layer: Date.now(), // New elements are on top by default
+                        };
+
+                        // Set specific properties based on asset type
+                        if (asset.type === "image") {
+                            newElement.src = asset.url || asset.src;
+                            newElement.fill = "fill";
+                            newElement.size = { width: 400, height: 300 };
+                        } else if (asset.type === "video") {
+                            newElement.src = asset.url || asset.src;
+                            newElement.thumbnail = asset.thumbnail;
+                            newElement.volume = 75;
+                            newElement.fill = "fill";
+                            newElement.size = { width: 320, height: 180 };
+                        } else if (asset.type === "shape") {
+                            newElement.type = "shape";
+                            newElement.shapeType = asset.name;
+                            newElement.color = asset.color || "#3b82f6";
+                            newElement.size = { width: 100, height: 100 };
+                        } else if (asset.type === "text") {
+                            const fs = asset.fontSize || 32;
+                            newElement.content = asset.content || "Double click to edit";
+                            newElement.fontSize = fs;
+                            newElement.fontWeight = asset.fontWeight || "bold";
+                            newElement.color = asset.color || "#ffffff";
+                            newElement.backgroundColor = asset.backgroundColor || "transparent";
+                            newElement.size = { width: 400, height: Math.max(60, fs * 1.4) };
+                        } else if (asset.type === "audio") {
+                            newElement.type = "audio";
+                            newElement.src = asset.url || asset.src;
+                            newElement.volume = 100;
+                            newElement.size = { width: 150, height: 60 };
+                        }
+
+                        addElement(currentPageId, newElement);
+                    } catch (err) {
+                        console.error("Drop failed:", err);
+                    }
+                }}
             >
                 {/* Time ruler */}
                 <div className={cn(

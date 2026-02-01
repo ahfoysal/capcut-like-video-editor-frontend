@@ -50,8 +50,21 @@ export function PropertiesPanel() {
   };
 
   const handleLayerChange = (direction: "front" | "back") => {
-    const newLayer = direction === "front" ? Date.now() : -Date.now();
-    handleUpdate({ layer: newLayer } as any);
+    if (!currentPage || !selectedElement) return;
+
+    // Get all current layers
+    const layers = currentPage.elements.map((el) => (el as any).layer ?? 0);
+    const currentLayer = (selectedElement as any).layer ?? 0;
+
+    if (direction === "front") {
+      // Move to front: find max layer and add 1
+      const maxLayer = Math.max(...layers, 0);
+      handleUpdate({ layer: maxLayer + 1 } as any);
+    } else {
+      // Send to back: find min layer and subtract 1
+      const minLayer = Math.min(...layers, 0);
+      handleUpdate({ layer: minLayer - 1 } as any);
+    }
   };
 
   const handleSplit = () => {
@@ -319,6 +332,50 @@ export function PropertiesPanel() {
                 value={(selectedElement as any).content || ""}
                 onChange={(e) => handleUpdate({ content: e.target.value })}
               />
+              <div className="space-y-3 bg-secondary/10 p-3 rounded-xl border border-border">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-tighter">
+                    Font Size
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      className="w-12 bg-transparent border-none text-[11px] font-mono font-bold text-accent text-right outline-none"
+                      value={(selectedElement as any).fontSize || 32}
+                      onChange={(e) => {
+                        const newSize = parseInt(e.target.value) || 12;
+                        const updates: any = { fontSize: newSize };
+                        if (newSize * 1.4 > selectedElement.size.height) {
+                          updates.size = {
+                            ...selectedElement.size,
+                            height: Math.ceil(newSize * 1.4),
+                          };
+                        }
+                        handleUpdate(updates);
+                      }}
+                    />
+                    <span className="text-[10px] text-text-muted">PX</span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="8"
+                  max="200"
+                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"
+                  value={(selectedElement as any).fontSize || 32}
+                  onChange={(e) => {
+                    const newSize = parseInt(e.target.value);
+                    const updates: any = { fontSize: newSize };
+                    if (newSize * 1.4 > selectedElement.size.height) {
+                      updates.size = {
+                        ...selectedElement.size,
+                        height: Math.ceil(newSize * 1.4),
+                      };
+                    }
+                    handleUpdate(updates);
+                  }}
+                />
+              </div>
               <div className="flex items-center gap-1 border border-border rounded-xl p-1 bg-secondary/10">
                 <button
                   onClick={() => handleUpdate({ textAlign: "left" })}
