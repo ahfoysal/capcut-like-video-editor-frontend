@@ -12,6 +12,7 @@ export function ProjectList() {
     deleteProjectById,
     resetProject,
     setProjectName,
+    isDarkMode,
   } = useEditorStore();
 
   useEffect(() => {
@@ -33,12 +34,12 @@ export function ProjectList() {
   };
 
   return (
-    <div className="flex-1 h-full bg-[#0a0a0c] overflow-y-auto p-12 custom-scrollbar">
+    <div className="flex-1 h-full bg-bg-app overflow-y-auto p-12 custom-scrollbar">
       <div className="max-w-6xl mx-auto space-y-12">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-extrabold text-white tracking-tight">
+            <h1 className="text-4xl font-extrabold text-text-main tracking-tight">
               My Projects
             </h1>
             <p className="text-text-muted mt-2 text-lg">
@@ -56,12 +57,12 @@ export function ProjectList() {
 
         {/* Content */}
         {allProjects.length === 0 ? (
-          <div className="bg-secondary/5 border border-white/5 rounded-3xl p-20 text-center space-y-6">
-            <div className="w-32 h-32 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10 shadow-inner">
-              <Monitor size={48} className="text-white/20" />
+          <div className="bg-bg-panel/20 border border-border rounded-3xl p-20 text-center space-y-6">
+            <div className="w-32 h-32 bg-bg-hover rounded-full flex items-center justify-center mx-auto border border-border shadow-inner">
+              <Monitor size={48} className="text-text-muted/20" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-text-main">
                 No projects found
               </h2>
               <p className="text-text-muted mt-2">
@@ -80,17 +81,17 @@ export function ProjectList() {
             {allProjects.map((project: any) => (
               <div
                 key={project.id}
-                className="group bg-secondary/10 border border-white/5 rounded-2xl overflow-hidden hover:border-accent/50 transition-all hover:shadow-[0_0_40px_rgba(34,211,238,0.1)] flex flex-col cursor-pointer"
+                className="group bg-bg-panel border border-border rounded-2xl overflow-hidden hover:border-primary/50 transition-all hover:shadow-[0_0_40px_rgba(15,166,255,0.1)] flex flex-col cursor-pointer"
                 onClick={() => handleOpenProject(project.id)}
               >
                 {/* Thumbnail Placeholder */}
-                <div className="aspect-video bg-black/40 flex items-center justify-center relative border-b border-white/5">
+                <div className="aspect-video bg-black/40 flex items-center justify-center relative border-b border-border">
                   <Monitor
                     size={48}
-                    className="text-white/10 group-hover:scale-110 transition-transform duration-500"
+                    className="text-text-muted/10 group-hover:scale-110 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                    <span className="text-white font-bold text-sm flex items-center gap-2">
+                    <span className="text-text-main font-bold text-sm flex items-center gap-2">
                       Open Editor <ChevronRight size={16} />
                     </span>
                   </div>

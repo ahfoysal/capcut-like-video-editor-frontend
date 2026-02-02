@@ -153,6 +153,50 @@ const CanvasElement = React.memo(
       return `http://localhost:3001${url.startsWith("/") ? "" : "/"}${url}`;
     };
 
+    const localTextRef = React.useRef<HTMLTextAreaElement | null>(null);
+    const contentRef = React.useRef<HTMLDivElement | null>(null);
+
+    React.useEffect(() => {
+      if (editingElementId === element.id && localTextRef.current) {
+        const el = localTextRef.current;
+        el.focus();
+        const length = el.value.length;
+        el.setSelectionRange(length, length);
+      }
+    }, [editingElementId, element.id]);
+
+    // Synchronize actual rendered size for text elements
+    React.useEffect(() => {
+      if (
+        element.type !== "text" ||
+        !contentRef.current ||
+        !currentPageId ||
+        isDragging
+      )
+        return;
+
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (entry) {
+          const target = entry.target as HTMLElement;
+          const finalWidth = target.offsetWidth;
+          const finalHeight = target.offsetHeight;
+
+          if (
+            Math.abs(finalWidth - element.size.width) > 2 ||
+            Math.abs(finalHeight - element.size.height) > 2
+          ) {
+            updateElement(currentPageId, element.id, {
+              size: { width: finalWidth, height: finalHeight },
+            });
+          }
+        }
+      });
+
+      observer.observe(contentRef.current);
+      return () => observer.disconnect();
+    }, [element.id, element.type, isDragging, currentPageId, updateElement]);
+
     return (
       <div
         key={element.id}
@@ -170,9 +214,10 @@ const CanvasElement = React.memo(
           }
         }}
         className={cn(
-          "absolute select-none group/el",
+          "absolute group/el",
+          editingElementId !== element.id && "select-none",
           isSelected &&
-            "ring-[1.5px] ring-[#5956E8] z-50 shadow-[0_0_20px_rgba(89,86,232,0.3)]",
+            "ring-[1.5px] ring-primary z-50 shadow-[0_0_20px_rgba(15,166,255,0.3)]",
           isDragging && hasMoved && "pointer-events-none opacity-50",
           !hasMoved && isDragging && "opacity-80",
           isObscuring &&
@@ -181,8 +226,10 @@ const CanvasElement = React.memo(
         style={{
           left: `${element.position.x}px`,
           top: `${element.position.y}px`,
-          width: `${element.size.width}px`,
+          width: element.type === "text" ? "auto" : `${element.size.width}px`,
           height: element.type === "text" ? "auto" : `${element.size.height}px`,
+          minWidth:
+            element.type === "text" ? `${element.size.width}px` : undefined,
           minHeight:
             element.type === "text" ? `${element.size.height}px` : undefined,
           zIndex: (element as any).layer ?? 0,
@@ -192,16 +239,22 @@ const CanvasElement = React.memo(
         {/* Element Toolbar */}
         {isSelected && !isDragging && (
           <div
-            className="absolute -top-12 left-1/2 flex items-center gap-1 bg-white rounded-lg shadow-xl border border-gray-100 p-1 z-[100] animate-in slide-in-from-bottom-2 fade-in duration-200"
+            className={cn(
+              "absolute left-1/2 flex items-center gap-1 bg-bg-panel rounded-lg shadow-xl border border-border p-1 z-[100] animate-in fade-in duration-200",
+              element.position.y < 50
+                ? "-bottom-12 slide-in-from-top-2"
+                : "-top-12 slide-in-from-bottom-2",
+            )}
             style={{
               transform: `translateX(-50%) scale(${100 / zoom})`,
-              transformOrigin: "bottom center",
+              transformOrigin:
+                element.position.y < 50 ? "top center" : "bottom center",
             }}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
+              className="p-1.5 hover:bg-bg-hover rounded-md text-text-main transition-colors"
               title="Replace"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
@@ -212,7 +265,7 @@ const CanvasElement = React.memo(
               <ImageIcon className="w-4 h-4" />
             </button>
             <button
-              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
+              className="p-1.5 hover:bg-bg-hover rounded-md text-text-main transition-colors"
               title="Fit to Canvas"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
@@ -232,8 +285,8 @@ const CanvasElement = React.memo(
               className={cn(
                 "p-1.5 rounded-md transition-colors",
                 (element as any).fill === "fit"
-                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  : "hover:bg-gray-100 text-gray-700",
+                  ? "bg-primary/10 text-primary hover:bg-primary/20"
+                  : "hover:bg-bg-hover text-text-main",
               )}
               title="Toggle Fit/Fill"
               onMouseDown={(e) => e.stopPropagation()}
@@ -248,7 +301,7 @@ const CanvasElement = React.memo(
             >
               <Crop className="w-4 h-4" />
             </button>
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
+            <div className="w-px h-4 bg-border mx-0.5" />
             <button
               className="p-1.5 hover:bg-red-50 text-red-500 rounded-md transition-colors"
               onMouseDown={(e) => e.stopPropagation()}
@@ -264,7 +317,7 @@ const CanvasElement = React.memo(
               <Trash2 className="w-4 h-4" />
             </button>
             <button
-              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
+              className="p-1.5 hover:bg-bg-hover rounded-md text-text-main transition-colors"
               title="More"
             >
               <MoreHorizontal className="w-4 h-4" />
@@ -275,14 +328,14 @@ const CanvasElement = React.memo(
         {/* Rotation Handle */}
         {isSelected && !isDragging && (
           <div
-            className="absolute -bottom-8 left-1/2 w-6 h-6 bg-white rounded-full shadow-lg border border-gray-200 flex items-center justify-center cursor-move hover:scale-110 transition-transform z-[100]"
+            className="absolute -bottom-8 left-1/2 w-6 h-6 bg-bg-panel rounded-full shadow-lg border border-border flex items-center justify-center cursor-move hover:scale-110 transition-transform z-[100]"
             style={{
               transform: `translateX(-50%) scale(${100 / zoom})`,
               transformOrigin: "top center",
             }}
             onMouseDown={(e) => handleMouseDown(e, element, "rotate")}
           >
-            <RotateCw className="w-3 h-3 text-gray-600" />
+            <RotateCw className="w-3 h-3 text-text-muted" />
           </div>
         )}
         {element.type === "image" && (
@@ -439,6 +492,7 @@ const CanvasElement = React.memo(
 
         {element.type === "text" && (
           <div
+            ref={contentRef}
             className="w-full flex items-center justify-center wrap-break-word text-center px-4 py-2"
             style={{
               fontSize: `${(element as any).fontSize}px`,
@@ -465,6 +519,7 @@ const CanvasElement = React.memo(
           >
             {editingElementId === element.id ? (
               <textarea
+                ref={localTextRef}
                 autoFocus
                 defaultValue={(element as any).content}
                 onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
@@ -684,7 +739,13 @@ export function EditorCanvas() {
   );
 
   // All audio elements (render every one so they preload; each only plays when in range)
-  const allAudioElements = allElements.filter((el) => el.type === "audio");
+  const allAudioElements = React.useMemo(() => {
+    return pages.flatMap((p) =>
+      p.elements
+        .filter((el) => el.type === "audio")
+        .map((el) => ({ ...el, pageId: p.id })),
+    );
+  }, [pages]);
 
   // Strict Layering Sort: Videos/Images (backgrounds) first, then Text/Shapes (overlays)
   // Secondary Sort: Maintain original array index (time-based or user-defined layer)
@@ -757,6 +818,10 @@ export function EditorCanvas() {
     type: "move" | "resize" | "rotate",
     handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se",
   ) => {
+    // Don't prevent default or start drag if clicking inside a textarea we're editing
+    if ((e.target as HTMLElement).tagName === "TEXTAREA") {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     pushHistory(); // Record state before changes
@@ -1168,8 +1233,22 @@ export function EditorCanvas() {
       const audioRef = React.useRef<HTMLAudioElement>(null);
       const lastSyncTime = React.useRef(0);
       const [isReady, setIsReady] = React.useState(false);
+      const currentPageId = useEditorStore((s) => s.currentPageId);
 
       const srcUrl = getAssetUrl(element.src);
+
+      // Handle metadata (naturalDuration) for MP3s
+      const onLoadedMetadata = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+        const el = e.currentTarget;
+        if (
+          el.duration &&
+          (!element.naturalDuration || element.naturalDuration === 0)
+        ) {
+          useEditorStore.getState().updateElement(element.pageId, element.id, {
+            naturalDuration: el.duration,
+          });
+        }
+      };
 
       // Wait for audio to be ready to play
       React.useEffect(() => {
@@ -1206,7 +1285,7 @@ export function EditorCanvas() {
           el.muted = false;
           el.volume = Math.min(1, Math.max(0, volume));
 
-          if (state.isPlaying) {
+          if (state.isPlaying && state.currentPageId === element.pageId) {
             if (inRange) {
               const diff = Math.abs(el.currentTime - clampedOffset);
               // Increased threshold to reduce unnecessary seeks
@@ -1247,6 +1326,7 @@ export function EditorCanvas() {
           ref={audioRef}
           src={srcUrl}
           preload="auto"
+          onLoadedMetadata={onLoadedMetadata}
           crossOrigin="anonymous"
           muted={false}
           playsInline
@@ -1610,7 +1690,7 @@ export function EditorCanvas() {
   return (
     <div
       className={cn(
-        "w-full h-full flex flex-col items-center justify-center bg-[#111114] relative",
+        "w-full h-full flex flex-col items-center justify-center bg-bg-panel relative",
         isFullscreen ? "p-0" : "p-8",
       )}
       onMouseMove={handleMouseMove}
@@ -1783,7 +1863,7 @@ export function EditorCanvas() {
             flexShrink: 0,
             margin: "200px", // Give space for zoom/toolbar
           }}
-          className="relative shadow-2xl bg-white border border-border/50 rounded-sm overflow-hidden group transition-all duration-300"
+          className="relative shadow-2xl bg-white border border-border/50 rounded-sm group transition-all duration-300"
         >
           {/* Hidden Canvas for Recording (DO NOT REMOVE) */}
           <canvas

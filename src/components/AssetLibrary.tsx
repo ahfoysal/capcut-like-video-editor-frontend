@@ -357,25 +357,25 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                   key={el.id}
                   onClick={() => setSelectedElement(el.id)}
                   className={cn(
-                    "flex items-center justify-between p-3 bg-white/[0.02] border rounded-xl group transition-all duration-300 cursor-pointer",
+                    "flex items-center justify-between p-3 bg-bg-panel border border-border shadow-sm rounded-xl group transition-all duration-300 cursor-pointer",
                     selectedElementId === el.id
-                      ? "border-[#5956E8] bg-[#5956E8]/5 shadow-[0_0_15px_rgba(89,86,232,0.1)]"
-                      : "border-white/5 hover:border-white/20 hover:bg-white/[0.04]",
+                      ? "border-primary bg-primary/5 shadow-[0_0_15px_rgba(15,166,255,0.05)]"
+                      : "border-border hover:border-primary/30 hover:bg-bg-hover",
                   )}
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-8 h-8 rounded-lg bg-black/40 flex items-center justify-center border border-white/5">
+                    <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center border border-border">
                       {el.type === "text" && (
-                        <Type size={14} className="text-white/60" />
+                        <Type size={14} className="text-text-muted" />
                       )}
                       {el.type === "image" && (
-                        <ImageIcon size={14} className="text-white/60" />
+                        <ImageIcon size={14} className="text-text-muted" />
                       )}
                       {el.type === "video" && (
-                        <Video size={14} className="text-white/60" />
+                        <Video size={14} className="text-text-muted" />
                       )}
                       {el.type === "audio" && (
-                        <Music size={14} className="text-white/60" />
+                        <Music size={14} className="text-text-muted" />
                       )}
                     </div>
                     <div className="flex flex-col min-w-0">
@@ -396,7 +396,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                             layer: Date.now(),
                           });
                       }}
-                      className="p-1.5 hover:bg-white/10 rounded-md text-text-muted hover:text-white"
+                      className="p-1.5 hover:bg-black/5 rounded-md text-text-muted hover:text-text-main"
                       title="Bring to Front"
                     >
                       <Zap size={12} />
@@ -409,7 +409,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                             layer: -Date.now(),
                           });
                       }}
-                      className="p-1.5 hover:bg-white/10 rounded-md text-text-muted hover:text-white"
+                      className="p-1.5 hover:bg-black/5 rounded-md text-text-muted hover:text-text-main"
                       title="Send to Back"
                     >
                       <Sparkles size={12} />
@@ -432,7 +432,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
         </h3>
         {searchingStock ? (
           <div className="py-20 flex flex-col items-center justify-center gap-3">
-            <div className="w-6 h-6 border-2 border-white/10 border-t-accent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-border border-t-primary rounded-full animate-spin" />
             <span className="text-[10px] font-bold text-text-muted uppercase">
               Searching...
             </span>
@@ -460,7 +460,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                 }}
                 className="group cursor-pointer animate-in fade-in zoom-in duration-300"
               >
-                <div className="relative rounded-2xl overflow-hidden border border-white/5 bg-white/[0.02] aspect-square flex items-center justify-center shadow-lg group-hover:border-[#5956E8]/50 transition-all duration-500">
+                <div className="relative rounded-2xl overflow-hidden border border-border bg-secondary aspect-square flex items-center justify-center shadow-sm group-hover:border-primary/50 transition-all duration-500">
                   {item.icon ? (
                     <div
                       style={{ color: item.color }}
@@ -470,17 +470,17 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                     </div>
                   ) : item.type === "text" ? (
                     <div className="flex flex-col items-center px-4 text-center">
-                      <span className="text-[12px] font-black text-white leading-tight mb-2 truncate w-full uppercase tracking-tighter opacity-80 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[12px] font-black text-text-main leading-tight mb-2 truncate w-full uppercase tracking-tighter opacity-70 group-hover:opacity-100 transition-opacity">
                         {item.content}
                       </span>
-                      <div className="h-0.5 w-6 bg-[#5956E8]/60 rounded-full group-hover:w-full transition-all duration-500" />
+                      <div className="h-0.5 w-6 bg-primary/60 rounded-full group-hover:w-full transition-all duration-500" />
                     </div>
                   ) : item.type === "audio" ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-[#5956E8]/5 group-hover:bg-[#5956E8]/10 transition-colors">
-                      <div className="w-14 h-14 rounded-full bg-[#5956E8]/10 flex items-center justify-center mb-2 border border-[#5956E8]/20 shadow-[0_0_20px_rgba(89,86,232,0.1)] group-hover:scale-110 transition-transform duration-500">
-                        <Music size={28} className="text-[#5956E8]" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-primary/5 group-hover:bg-primary/10 transition-colors">
+                      <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-2 border border-primary/20 shadow-[0_0_20px_rgba(15,166,255,0.05)] group-hover:scale-110 transition-transform duration-500">
+                        <Music size={28} className="text-primary" />
                       </div>
-                      <span className="text-[9px] font-black text-[#5956E8] uppercase tracking-[0.2em]">
+                      <span className="text-[9px] font-black text-primary uppercase tracking-[0.2em]">
                         AUDIO
                       </span>
                     </div>
@@ -510,11 +510,11 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                       </div>
 
                       {/* Media Badge */}
-                      <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded shadow-lg backdrop-blur-md bg-black/40 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded shadow-sm backdrop-blur-md bg-bg-panel/60 border border-border opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                         {item.type === "video" ? (
-                          <Video size={10} className="text-white" />
+                          <Video size={10} className="text-text-main" />
                         ) : (
-                          <ImageIcon size={10} className="text-white" />
+                          <ImageIcon size={10} className="text-text-main" />
                         )}
                       </div>
                     </div>
@@ -536,7 +536,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                     )}
                   </div>
                 </div>
-                <p className="mt-2 text-[10px] font-bold text-zinc-500 truncate px-1 group-hover:text-[#5956E8] transition-all duration-300 uppercase tracking-tighter">
+                <p className="mt-2 text-[10px] font-bold text-text-muted truncate px-1 group-hover:text-primary transition-all duration-300 uppercase tracking-tighter">
                   {item.name}
                 </p>
               </div>
@@ -567,16 +567,16 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
           </p>
         </div>
       )}
-      <div className="p-6 border-b border-white/5 space-y-5 bg-[#111114]/50">
+      <div className="p-6 border-b border-border space-y-5 bg-bg-panel">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <h2 className="text-sm font-black text-white tracking-[0.2em] uppercase">
+            <h2 className="text-sm font-black text-text-main tracking-[0.2em] uppercase">
               {activeTab}
             </h2>
-            <div className="h-1 w-6 bg-[#5956E8] rounded-full mt-1" />
+            <div className="h-1 w-6 bg-primary rounded-full mt-1" />
           </div>
           {activeTab === "upload" && (
-            <label className="cursor-pointer p-2 hover:bg-white/5 text-zinc-400 hover:text-white rounded-lg transition-all active:scale-90 group relative border border-white/5 bg-white/[0.02]">
+            <label className="cursor-pointer p-2 hover:bg-bg-hover text-text-muted hover:text-text-main rounded-lg transition-all active:scale-90 group relative border border-border bg-bg-panel shadow-sm">
               <Upload size={16} />
               <input type="file" className="hidden" onChange={handleUpload} />
             </label>
@@ -584,7 +584,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
         </div>
 
         <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 group-focus-within:text-[#5956E8] transition-colors" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted group-focus-within:text-primary transition-colors" />
           <input
             type="text"
             value={activeTab === "media" ? stockSearch : ""}
@@ -592,14 +592,14 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
               activeTab === "media" ? setStockSearch(e.target.value) : null
             }
             placeholder={`Search ${activeTab === "media" ? "library" : activeTab}...`}
-            className="w-full pl-9 pr-3 py-2 bg-zinc-900/50 border border-white/5 rounded-xl text-[12px] text-white placeholder:text-zinc-600 focus:outline-none focus:bg-zinc-900 focus:border-[#5956E8]/30 transition-all font-medium"
+            className="w-full pl-9 pr-3 py-2 bg-secondary/80 border border-border rounded-xl text-[12px] text-text-main placeholder:text-text-muted/50 focus:outline-none focus:bg-bg-panel focus:border-primary/30 transition-all font-medium"
           />
         </div>
       </div>
 
       {loading && activeTab === "upload" ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-text-muted space-y-3">
-          <div className="w-10 h-10 border-4 border-white/5 border-t-white rounded-full animate-spin" />
+          <div className="w-10 h-10 border-4 border-border border-t-primary rounded-full animate-spin" />
           <p className="text-sm font-bold animate-pulse text-text-main">
             {uploadStatusMessage}
           </p>

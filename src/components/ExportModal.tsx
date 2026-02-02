@@ -41,9 +41,9 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
     let audioContext: AudioContext | null = null;
     let audioDestination: MediaStreamAudioDestinationNode | null = null;
     const chunks: Blob[] = [];
+    let animationFrame: number;
 
     if (status === "exporting") {
-      // Enable canvas drawing for export (EditorCanvas checks this)
       document.body.classList.add("export-in-progress");
 
       const canvas = document.getElementById(
@@ -55,17 +55,13 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         return;
       }
 
-      // Get the visual stream from canvas
       const videoStream = canvas.captureStream(30);
-
-      // Create audio context to mix all audio
       audioContext = new AudioContext({ sampleRate: 44100 });
       audioDestination = audioContext.createMediaStreamDestination();
 
       const state = useEditorStore.getState();
       const allPages = state.pages;
 
-      // Calculate page ranges and total duration
       let totalDuration = 0;
       const pageRanges = allPages.map((p) => {
         const start = totalDuration;
@@ -74,17 +70,15 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         return { id: p.id, start, end };
       });
 
-      // Combine video and audio streams
+      const audioTracks = audioDestination.stream.getAudioTracks();
       const combinedStream = new MediaStream([
         ...videoStream.getVideoTracks(),
-        ...(audioDestination.stream.getAudioTracks().length > 0
-          ? audioDestination.stream.getAudioTracks()
-          : []),
+        ...(audioTracks.length > 0 ? audioTracks : []),
       ]);
 
       const options: MediaRecorderOptions = {
         mimeType: "video/webm;codecs=vp9,opus",
-        videoBitsPerSecond: 8000000, // High quality
+        videoBitsPerSecond: 8000000,
         audioBitsPerSecond: 128000,
       };
       if (!MediaRecorder.isTypeSupported(options.mimeType!)) {
@@ -108,17 +102,19 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         }
       };
 
-      // Function to connect current page audio elements
       const connectPageAudio = (pageId: string) => {
         if (!audioContext || !audioDestination) return;
         const page = allPages.find((p) => p.id === pageId);
         if (!page) return;
 
-        const audioElements = page.elements.filter((el) => el.type === "audio");
-        const videoElements = page.elements.filter((el) => el.type === "video");
+        const audioElements = page.elements.filter(
+          (el: any) => el.type === "audio",
+        );
+        const videoElements = page.elements.filter(
+          (el: any) => el.type === "video",
+        );
 
-        // Connect Audio
-        audioElements.forEach((el) => {
+        audioElements.forEach((el: any) => {
           try {
             const audioEl = Array.from(document.querySelectorAll("audio")).find(
               (audio) => {
@@ -140,8 +136,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
           }
         });
 
-        // Connect Video
-        videoElements.forEach((el) => {
+        videoElements.forEach((el: any) => {
           try {
             const videoEl = Array.from(document.querySelectorAll("video")).find(
               (video) => {
@@ -151,7 +146,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
             ) as HTMLVideoElement;
 
             if (videoEl && !(videoEl as any).audioSourceNode) {
-              videoEl.muted = false; // Must be unmuted for AudioContext to hear it
+              videoEl.muted = false;
               const source = audioContext!.createMediaElementSource(videoEl);
               (videoEl as any).audioSourceNode = source;
               const gainNode = audioContext!.createGain();
@@ -165,11 +160,12 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         });
       };
 
-      // Function to wait for images and videos on the page to be ready
       const waitForMedia = async () => {
         const mediaElements = Array.from(
-          document.querySelectorAll("#editor-canvas img, #editor-canvas video"),
-        ) as (HTMLImageElement | HTMLVideoElement)[];
+          document.querySelectorAll(
+            "#editor-canvas img, #editor-canvas video, audio",
+          ),
+        ) as (HTMLImageElement | HTMLVideoElement | HTMLAudioElement)[];
         await Promise.all(
           mediaElements.map((el) => {
             if (el.tagName === "IMG") {
@@ -178,39 +174,43 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
                 el.onload = resolve;
                 el.onerror = resolve;
               });
-            } else {
-              // For video, we wait for the seek to complete
+            } else if (el.tagName === "VIDEO") {
               if (
                 (el as HTMLVideoElement).readyState >= 2 &&
                 !(el as HTMLVideoElement).seeking
               )
                 return Promise.resolve();
               return new Promise((resolve) => {
-                el.onseeked = resolve;
-                el.oncanplay = resolve;
-                el.onerror = resolve;
+                const onDone = () => {
+                  el.removeEventListener("seeked", onDone);
+                  el.removeEventListener("error", onDone);
+                  resolve(null);
+                };
+                el.addEventListener("seeked", onDone);
+                el.addEventListener("error", onDone);
+                setTimeout(onDone, 500);
               });
+            } else if (el.tagName === "AUDIO") {
+              if ((el as HTMLAudioElement).seeking) {
+                return new Promise((resolve) => {
+                  const onDone = () => {
+                    el.removeEventListener("seeked", onDone);
+                    el.removeEventListener("error", onDone);
+                    resolve(null);
+                  };
+                  el.addEventListener("seeked", onDone);
+                  el.addEventListener("error", onDone);
+                  setTimeout(onDone, 500);
+                });
+              }
+              return Promise.resolve();
             }
+            return Promise.resolve();
           }),
         );
-        // Small extra delay for React/DOM updates
         await new Promise((resolve) => setTimeout(resolve, 50));
       };
 
-      // Start Recording
-      setTimelinePosition(0);
-      const startRecording = async () => {
-        if (audioContext?.state === "suspended") {
-          await audioContext.resume();
-        }
-        setTimeout(() => {
-          recorderVar?.start(100);
-          renderFrame();
-        }, 800);
-      };
-
-      // Render Loop
-      let animationFrame: number;
       let currentTime = 0;
       const fps = 30;
       const step = 1 / fps;
@@ -227,7 +227,6 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
 
         if (range && range.id !== useEditorStore.getState().currentPageId) {
           useEditorStore.getState().setCurrentPage(range.id);
-          // Wait for mount and audio connection
           await new Promise((resolve) => setTimeout(resolve, 300));
           connectPageAudio(range.id);
         }
@@ -236,18 +235,32 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         setTimelinePosition(relativeTime);
         setProgress((currentTime / totalDuration) * 100);
 
-        // Wait for elements to seek/load
         await waitForMedia();
 
         currentTime += step;
         animationFrame = requestAnimationFrame(renderFrame);
       };
 
-      // Initial setup
-      setTimeout(() => {
+      const startRecording = async () => {
+        if (audioContext?.state === "suspended") {
+          await audioContext.resume();
+        }
+        setTimeout(() => {
+          recorderVar?.start(100);
+          renderFrame();
+        }, 800);
+      };
+
+      const initExport = async () => {
         connectPageAudio(state.currentPageId);
-        startRecording();
-      }, 500);
+        if (audioContext?.state === "suspended") {
+          await audioContext.resume();
+        }
+        setTimeout(() => {
+          startRecording();
+        }, 1000);
+      };
+      initExport();
 
       return () => {
         document.body.classList.remove("export-in-progress");
@@ -328,7 +341,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
 
       {/* Modal content */}
       <div className="relative w-full max-w-lg bg-bg-panel border border-border rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
-        <div className="p-6 border-b border-border flex items-center justify-between bg-white/5">
+        <div className="p-6 border-b border-border flex items-center justify-between lg:bg-bg-panel/50 bg-bg-hover/20">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center border border-accent/20">
               <Film className="text-accent w-5 h-5" />
@@ -344,7 +357,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors text-text-muted hover:text-text-main"
+            className="p-2 hover:bg-bg-hover rounded-full transition-colors text-text-muted hover:text-text-main"
           >
             <X size={20} />
           </button>
@@ -417,7 +430,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
                     stroke="currentColor"
                     strokeWidth="4"
                     fill="transparent"
-                    className="text-white/5"
+                    className="text-text-muted/10"
                   />
                   <circle
                     cx="48"
@@ -446,7 +459,7 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
                 this window.
               </p>
 
-              <div className="mt-8 w-full max-w-sm h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <div className="mt-8 w-full max-w-sm h-1.5 bg-bg-hover rounded-full overflow-hidden">
                 <div
                   className="h-full bg-accent shadow-[0_0_15px_rgba(34,211,238,0.5)] transition-all duration-300"
                   style={{ width: `${progress}%` }}

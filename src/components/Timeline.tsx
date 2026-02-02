@@ -595,9 +595,9 @@ export function Timeline({ className }: { className?: string }) {
       </div>
 
       {/* Timeline Controls */}
-      <div className="h-14 border-y border-white/5 flex items-center px-6 justify-between bg-bg-panel relative z-50">
+      <div className="h-14 border-y border-border flex items-center px-6 justify-between bg-bg-panel relative z-50">
         <div className="flex items-center gap-8">
-          <div className="text-[14px] font-black text-[#5956E8] tabular-nums tracking-widest bg-[#5956E8]/10 px-4 py-1.5 rounded-lg border border-[#5956E8]/20 shadow-[0_0_15px_rgba(89,86,232,0.1)]">
+          <div className="text-[14px] font-black text-primary tabular-nums tracking-widest bg-primary/10 px-4 py-1.5 rounded-lg border border-primary/20 shadow-[0_0_15px_rgba(15,166,255,0.05)]">
             {formatTime(timelinePosition)}
           </div>
 
@@ -605,14 +605,14 @@ export function Timeline({ className }: { className?: string }) {
             <button
               onClick={() => seekTo(0)}
               title="Skip to Beginning"
-              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
+              className="p-2 hover:bg-black/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <SkipBack size={16} />
             </button>
             <button
               onClick={() => seekTo(timelinePosition - 1)}
               title="Jump Back (1s)"
-              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
+              className="p-2 hover:bg-black/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <Minus size={14} />
             </button>
@@ -624,7 +624,7 @@ export function Timeline({ className }: { className?: string }) {
                 }
                 togglePlay();
               }}
-              className="w-10 h-10 bg-[#5956E8] text-white rounded-full flex items-center justify-center hover:bg-[#6a67ff] transition-all active:scale-90 shadow-[0_0_20px_rgba(89,86,232,0.4)]"
+              className="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center hover:brightness-110 transition-all active:scale-90 shadow-[0_0_20px_rgba(15,166,255,0.3)]"
             >
               {isPlaying ? (
                 <Pause size={18} fill="currentColor" />
@@ -635,14 +635,14 @@ export function Timeline({ className }: { className?: string }) {
             <button
               onClick={() => seekTo(timelinePosition + 1)}
               title="Jump Forward (1s)"
-              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
+              className="p-2 hover:bg-black/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <Plus size={14} />
             </button>
             <button
               onClick={() => seekTo(projectDuration)}
               title="Skip to End"
-              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
+              className="p-2 hover:bg-black/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <SkipForward size={16} />
             </button>
@@ -651,10 +651,10 @@ export function Timeline({ className }: { className?: string }) {
 
         {/* Relocated Info Bar */}
         <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-[0.2em]">
-          <div className="flex items-center gap-4 px-4 py-2 bg-white/[0.02] rounded-lg border border-white/5">
+          <div className="flex items-center gap-4 px-4 py-2 bg-secondary/50 rounded-lg border border-border">
             <div className="flex flex-col">
-              <span className="text-zinc-600 text-[8px]">RESOLUTION</span>
-              <span className="text-white">
+              <span className="text-text-muted text-[8px]">RESOLUTION</span>
+              <span className="text-text-main">
                 {(() => {
                   const l = currentPage?.layout || "16:9";
                   if (l === "1:1") return "1080X1080";
@@ -666,22 +666,22 @@ export function Timeline({ className }: { className?: string }) {
                 })()}
               </span>
             </div>
-            <div className="w-px h-6 bg-white/5" />
+            <div className="w-px h-6 bg-border" />
             <div className="flex flex-col">
-              <span className="text-zinc-600 text-[8px]">ASPECT RATIO</span>
-              <span className="text-accent">
+              <span className="text-text-muted text-[8px]">ASPECT RATIO</span>
+              <span className="text-primary">
                 {currentPage?.layout || "16:9"}
               </span>
             </div>
           </div>
 
-          <div className="flex flex-col px-4 py-2 bg-white/2 rounded-lg border border-white/5 min-w-35">
-            <span className="text-zinc-600 text-[8px]">PROJECT PROGRESS</span>
-            <div className="flex items-center gap-1.5 text-white tabular-nums">
-              <span className="text-accent">
+          <div className="flex flex-col px-4 py-2 bg-secondary/50 rounded-lg border border-border min-w-35">
+            <span className="text-text-muted text-[8px]">PROJECT PROGRESS</span>
+            <div className="flex items-center gap-1.5 text-text-main tabular-nums">
+              <span className="text-primary">
                 {formatTime(timelinePosition)}
               </span>
-              <span className="text-white/10">|</span>
+              <span className="text-border">|</span>
               <span className="text-text-muted">
                 {formatTime(projectDuration)}
               </span>
@@ -694,23 +694,23 @@ export function Timeline({ className }: { className?: string }) {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setTimelineZoom(Math.max(10, timelineZoom - 10))}
-              className="p-2 hover:bg-white/5 rounded-lg transition-all text-text-muted hover:text-text-main"
+              className="p-2 hover:bg-black/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <ZoomOut size={16} />
             </button>
-            <div className="w-32 h-1 bg-zinc-800 rounded-full relative overflow-visible">
+            <div className="w-32 h-1 bg-secondary rounded-full relative overflow-visible">
               <div
-                className="absolute left-0 top-0 h-full bg-accent rounded-full shadow-[0_0_10px_rgba(89,86,232,0.5)] transition-all duration-300"
+                className="absolute left-0 top-0 h-full bg-primary rounded-full shadow-[0_0_10px_rgba(15,166,255,0.3)] transition-all duration-300"
                 style={{ width: `${(timelineZoom / 200) * 100}%` }}
               />
               <div
-                className="absolute w-3 h-3 bg-white rounded-full top-1/2 -translate-y-1/2 shadow-lg border-2 border-accent transition-all"
+                className="absolute w-3 h-3 bg-white rounded-full top-1/2 -translate-y-1/2 shadow-sm border-2 border-primary transition-all"
                 style={{ left: `calc(${(timelineZoom / 200) * 100}% - 6px)` }}
               />
             </div>
             <button
               onClick={() => setTimelineZoom(Math.min(200, timelineZoom + 10))}
-              className="p-2 hover:bg-white/5 rounded-lg transition-all text-text-muted hover:text-text-main"
+              className="p-2 hover:bg-black/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <ZoomIn size={16} />
             </button>
@@ -719,7 +719,7 @@ export function Timeline({ className }: { className?: string }) {
           <div className="h-4 w-px bg-white/10 mx-2" />
 
           {/* Height Mode Selector */}
-          <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
+          <div className="flex items-center gap-1 bg-black/5 p-1 rounded-xl border border-border">
             {[
               { id: "small", icon: PanelBottomOpen, label: "Small" },
               { id: "default", icon: PanelBottom, label: "Default" },
@@ -736,8 +736,8 @@ export function Timeline({ className }: { className?: string }) {
                 className={cn(
                   "p-1.5 rounded-lg transition-all",
                   timelineHeightMode === mode.id
-                    ? "bg-[#5956E8] text-white shadow-[0_0_10px_rgba(89,86,232,0.3)]"
-                    : "text-text-muted hover:text-text-main hover:bg-white/5",
+                    ? "bg-primary text-white shadow-[0_0_10px_rgba(15,166,255,0.2)]"
+                    : "text-text-muted hover:text-text-main hover:bg-black/5",
                 )}
               >
                 <mode.icon size={14} />
@@ -750,7 +750,7 @@ export function Timeline({ className }: { className?: string }) {
           <button
             onClick={toggleFullscreen}
             title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-            className="p-2 hover:bg-white/5 rounded-lg transition-all text-text-muted hover:text-text-main"
+            className="p-2 hover:bg-black/5 rounded-lg transition-all text-text-muted hover:text-text-main"
           >
             {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
           </button>
@@ -777,7 +777,7 @@ export function Timeline({ className }: { className?: string }) {
         >
           {/* Timeline Ruler */}
           <div
-            className="sticky top-0 h-10 border-b border-white/5 bg-bg-panel flex items-center z-30 cursor-crosshair overflow-hidden"
+            className="sticky top-0 h-10 border-b border-border bg-bg-panel flex items-center z-30 cursor-crosshair overflow-hidden"
             onMouseDown={onRulerMouseDown}
             style={{ marginLeft: HEADER_WIDTH }}
           >
@@ -788,7 +788,7 @@ export function Timeline({ className }: { className?: string }) {
               return (
                 <div
                   key={time}
-                  className="absolute h-full border-l border-white/10 flex items-end pb-2 px-1.5 shrink-0"
+                  className="absolute h-full border-l border-border flex items-end pb-2 px-1.5 shrink-0"
                   style={{ left: time * PX_PER_SEC }}
                 >
                   <span className="text-[10px] font-black text-zinc-600 font-mono whitespace-nowrap tracking-tighter">
@@ -807,7 +807,7 @@ export function Timeline({ className }: { className?: string }) {
                 return (
                   <div
                     key={`minor-${time}`}
-                    className="absolute border-l border-white/5 h-2 bottom-0"
+                    className="absolute border-l border-border h-2 bottom-0"
                     style={{ left: time * PX_PER_SEC }}
                   />
                 );
@@ -842,20 +842,20 @@ export function Timeline({ className }: { className?: string }) {
             return (
               <div
                 key={track.label}
-                className="grid grid-cols-[120px_1fr] border-b border-white/3 group overflow-hidden"
+                className="grid grid-cols-[120px_1fr] border-b border-border group overflow-hidden"
                 style={{ minHeight: totalHeight }}
               >
-                <div className="sticky left-0 bg-bg-panel z-20 px-6 flex items-center border-r border-white/5 text-[9px] font-black text-text-muted uppercase tracking-[0.2em] group-hover:text-accent transition-all duration-300">
+                <div className="sticky left-0 bg-bg-panel z-20 px-6 flex items-center border-r border-border text-[9px] font-black text-text-muted uppercase tracking-[0.2em] group-hover:text-primary transition-all duration-300">
                   {track.label}
                 </div>
-                <div className="relative h-full py-2 bg-black/20">
+                <div className="relative h-full py-2 bg-secondary/30">
                   {/* Vertical grid lines */}
                   {Array.from({
                     length: Math.ceil(totalDuration / scaleConfig.major) + 1,
                   }).map((_, i) => (
                     <div
                       key={i}
-                      className="absolute top-0 bottom-0 border-l border-white/[0.02] pointer-events-none"
+                      className="absolute top-0 bottom-0 border-l border-border/30 pointer-events-none"
                       style={{ left: i * scaleConfig.major * PX_PER_SEC }}
                     />
                   ))}
@@ -872,8 +872,8 @@ export function Timeline({ className }: { className?: string }) {
                             "absolute h-9 rounded-lg border flex items-center px-3 cursor-move transition-all duration-300 z-10 overflow-hidden group/segment",
                             track.color,
                             selectedElementId === element.id
-                              ? "border-[#5956E8] bg-[#5956E8]/20 z-20 shadow-[0_0_20px_rgba(89,86,232,0.2)]"
-                              : "border-white/5 hover:border-white/20 bg-white/5 hover:bg-white/[0.08]",
+                              ? "border-primary bg-primary/20 z-20 shadow-[0_0_20px_rgba(15,166,255,0.1)]"
+                              : "border-border hover:border-primary/20 bg-bg-panel shadow-sm hover:bg-bg-hover",
                           )}
                           style={{
                             left: element.startTime * PX_PER_SEC,
@@ -892,13 +892,13 @@ export function Timeline({ className }: { className?: string }) {
                           {selectedElementId === element.id && (
                             <>
                               <div
-                                className="absolute left-0 top-0 bottom-0 w-1.5 hover:bg-[#5956E8] bg-[#5956E8]/40 cursor-ew-resize transition-all"
+                                className="absolute left-0 top-0 bottom-0 w-1.5 hover:bg-primary bg-primary/40 cursor-ew-resize transition-all"
                                 onMouseDown={(e) =>
                                   onSegmentMouseDown(e, element, "trim-left")
                                 }
                               />
                               <div
-                                className="absolute right-0 top-0 bottom-0 w-1.5 hover:bg-[#5956E8] bg-[#5956E8]/40 cursor-ew-resize transition-all"
+                                className="absolute right-0 top-0 bottom-0 w-1.5 hover:bg-primary bg-primary/40 cursor-ew-resize transition-all"
                                 onMouseDown={(e) =>
                                   onSegmentMouseDown(e, element, "trim-right")
                                 }
@@ -916,13 +916,13 @@ export function Timeline({ className }: { className?: string }) {
 
           {/* Playhead Layer */}
           <div
-            className="absolute top-0 bottom-0 w-[2px] bg-[#5956E8] z-40 pointer-events-none transition-none shadow-[0_0_15px_rgba(89,86,232,0.8)]"
+            className="absolute top-0 bottom-0 w-[2px] bg-primary z-40 pointer-events-none transition-none shadow-[0_0_15px_rgba(15,166,255,0.5)]"
             style={{
               left: HEADER_WIDTH + timelinePosition * PX_PER_SEC,
               height: "100%",
             }}
           >
-            <div className="w-4 h-4 bg-[#5956E8] rounded-full -translate-x-1/2 -mt-2 shadow-[0_0_10px_rgba(89,86,232,0.5)] border-2 border-white flex items-center justify-center">
+            <div className="w-4 h-4 bg-primary rounded-full -translate-x-1/2 -mt-2 shadow-[0_0_10px_rgba(15,166,255,0.3)] border-2 border-white flex items-center justify-center">
               <div className="w-1 h-1 bg-white rounded-full" />
             </div>
           </div>
@@ -930,8 +930,8 @@ export function Timeline({ className }: { className?: string }) {
       </div>
 
       {/* Layout Tabs Bar - Bottom Area */}
-      <div className="h-10 bg-[#1A1A1E] border-t border-border flex items-center px-4 gap-2">
-        <div className="flex items-center bg-[#111114] rounded-md p-0.5 border border-border/50">
+      <div className="h-10 bg-white border-t border-border flex items-center px-4 gap-2">
+        <div className="flex items-center bg-secondary/50 rounded-md p-0.5 border border-border">
           {pages.map((page, index) => (
             <div
               key={page.id}
@@ -1029,7 +1029,7 @@ export function Timeline({ className }: { className?: string }) {
 
         <button
           onClick={addPage}
-          className="w-7 h-7 flex items-center justify-center rounded-md bg-white/5 border border-border/50 text-text-muted hover:text-text-main hover:bg-white/10 transition-all active:scale-95"
+          className="w-7 h-7 flex items-center justify-center rounded-md bg-white border border-border shadow-sm text-text-muted hover:text-text-main hover:bg-black/5 transition-all active:scale-95"
           title="Add New Layout"
         >
           <Plus size={14} />

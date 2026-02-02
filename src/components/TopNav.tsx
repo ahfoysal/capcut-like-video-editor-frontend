@@ -10,6 +10,7 @@ import {
   Loader2,
   PanelLeft,
   PanelRight,
+  Sun,
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 
@@ -18,6 +19,7 @@ import { ExportModal } from "./ExportModal";
 export function TopNav() {
   const {
     projectName,
+    setProjectName,
     zoom,
     setZoom,
     future,
@@ -27,8 +29,8 @@ export function TopNav() {
     saveStatus,
     undo,
     redo,
-    history,
-    setProjectName,
+    isDarkMode,
+    toggleDarkMode,
     showLeftSidebar,
     showRightSidebar,
     toggleLeftSidebar,
@@ -41,33 +43,33 @@ export function TopNav() {
 
   return (
     <>
-      <div className="h-16 w-full bg-[#111114]/80 backdrop-blur-xl border-b border-white/5 flex items-center px-6 justify-between shrink-0 z-50 sticky top-0">
+      <div className="h-16 w-full bg-bg-panel/80 backdrop-blur-xl border-b border-border flex items-center px-6 justify-between shrink-0 z-50 sticky top-0">
         {/* Left Section: Back, Title, Project name & save status */}
         <div className="flex items-center gap-6">
           <button
             onClick={() => useEditorStore.getState().setViewMode("home")}
-            className="p-2 hover:bg-white/5 rounded-full text-zinc-400 hover:text-white transition-all active:scale-90"
+            className="p-2 hover:bg-bg-hover rounded-full text-text-muted hover:text-text-main transition-all active:scale-90"
             title="Go to Home"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex items-center border-r border-white/10 pr-6 h-8 gap-4">
+          <div className="flex items-center border-r border-border pr-6 h-8 gap-4">
             <button
               onClick={toggleLeftSidebar}
               className={`p-2 rounded-lg transition-all ${
                 showLeftSidebar
-                  ? "text-white bg-[#5956E8]"
-                  : "text-zinc-400 hover:bg-white/5"
+                  ? "text-white bg-primary shadow-sm"
+                  : "text-text-muted hover:bg-bg-hover"
               }`}
               title={showLeftSidebar ? "Hide Sidebar" : "Show Sidebar"}
             >
               <PanelLeft className="w-4.5 h-4.5" />
             </button>
             <div className="flex flex-col">
-              <span className="font-bold text-sm leading-none tracking-tight text-white uppercase opacity-90">
+              <span className="font-bold text-sm leading-none tracking-tight text-text-main uppercase">
                 Softvence
               </span>
-              <span className="text-[10px] text-[#5956E8] font-black uppercase tracking-widest mt-0.5">
+              <span className="text-[10px] text-primary font-black uppercase tracking-widest mt-0.5">
                 Omega
               </span>
             </div>
@@ -79,14 +81,14 @@ export function TopNav() {
                 type="text"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
-                className="bg-transparent border-none outline-none text-zinc-100 text-[13px] font-semibold focus:ring-0 p-0 w-fit min-w-[150px] transition-all placeholder:text-zinc-600"
+                className="bg-transparent border-none outline-none text-text-main text-[13px] font-semibold focus:ring-0 p-0 w-fit min-w-[150px] transition-all placeholder:text-text-muted/50"
                 placeholder="Untitled Project"
               />
               <div className="flex items-center gap-2 mt-0.5">
                 {saveStatus === "saving" && (
                   <div className="flex items-center gap-1.5 animate-pulse">
-                    <Loader2 className="w-2.5 h-2.5 text-zinc-500 animate-spin" />
-                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.1em]">
+                    <Loader2 className="w-2.5 h-2.5 text-text-muted animate-spin" />
+                    <span className="text-[9px] text-text-muted font-bold uppercase tracking-widest">
                       Syncing...
                     </span>
                   </div>
@@ -94,7 +96,7 @@ export function TopNav() {
                 {saveStatus === "saved" && (
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.1em]">
+                    <span className="text-[9px] text-text-muted font-bold uppercase tracking-widest">
                       Cloud Saved
                     </span>
                   </div>
@@ -104,7 +106,7 @@ export function TopNav() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 border-l border-white/10 pl-6 h-8">
+        <div className="flex items-center gap-3 border-l border-border pl-6 h-8">
           <select
             value={currentPage?.layout || "16:9"}
             onChange={(e) => {
@@ -112,7 +114,7 @@ export function TopNav() {
                 updatePage(currentPageId, { layout: e.target.value as any });
               }
             }}
-            className="bg-zinc-800/50 border border-white/5 rounded-md px-3 py-1 text-[11px] font-bold text-zinc-300 focus:outline-none focus:ring-1 focus:ring-[#5956E8]/50 hover:bg-zinc-800 transition-colors cursor-pointer appearance-none"
+            className="bg-bg-panel border border-border rounded-md px-3 py-1 text-[11px] font-bold text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50 hover:bg-secondary/50 transition-colors cursor-pointer appearance-none"
           >
             <option value="1:1">1:1 Square</option>
             <option value="16:9">16:9 Landscape</option>
@@ -123,40 +125,38 @@ export function TopNav() {
         </div>
 
         {/* Center Section: Zoom & Undo/Redo */}
-        <div className="flex-1 flex items-center justify-center gap-8">
+        <div className="flex-1 flex items-center justify-center gap-8 border-l border-r border-border h-8 mx-4">
           <div className="flex items-center gap-2">
             <button
               onClick={undo}
-              disabled={history.length === 0}
-              className="p-2 hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed rounded-full transition-all text-zinc-400 hover:text-white"
+              className="p-2 hover:bg-bg-hover disabled:opacity-20 disabled:cursor-not-allowed rounded-full transition-all text-text-muted hover:text-text-main"
               title="Undo (Ctrl+Z)"
             >
               <Undo2 className="w-4.5 h-4.5" />
             </button>
             <button
               onClick={redo}
-              disabled={future.length === 0}
-              className="p-2 hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed rounded-full transition-all text-zinc-400 hover:text-white"
+              className="p-2 hover:bg-bg-hover disabled:opacity-20 disabled:cursor-not-allowed rounded-full transition-all text-text-muted hover:text-text-main"
               title="Redo (Ctrl+Y)"
             >
               <Redo2 className="w-4.5 h-4.5" />
             </button>
           </div>
 
-          <div className="flex items-center bg-zinc-800/40 border border-white/5 rounded-full p-1 pl-4 pr-1 gap-2 shadow-inner">
-            <span className="text-[11px] font-black text-zinc-400 tracking-tighter w-8 text-center">
+          <div className="flex items-center bg-secondary border border-border rounded-full p-1 pl-4 pr-1 gap-2 shadow-sm">
+            <span className="text-[11px] font-black text-text-main tracking-tighter w-8 text-center">
               {zoom}%
             </span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setZoom(zoom - 10)}
-                className="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded-full transition-all text-zinc-400 hover:text-white"
+                className="w-6 h-6 flex items-center justify-center hover:bg-bg-hover rounded-full transition-all text-text-muted hover:text-text-main"
               >
                 <Minus className="w-3 h-3" />
               </button>
               <button
                 onClick={() => setZoom(zoom + 10)}
-                className="w-6 h-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-600 rounded-full transition-all text-white border border-white/10"
+                className="w-6 h-6 flex items-center justify-center bg-bg-panel hover:bg-bg-hover rounded-full transition-all text-text-main border border-border shadow-sm"
               >
                 <Plus className="w-3 h-3" />
               </button>
@@ -167,15 +167,25 @@ export function TopNav() {
         {/* Right Section: Actions, Mode */}
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2 mr-2">
-            <button className="p-2 hover:bg-white/5 rounded-full text-zinc-400 hover:text-white transition-colors">
-              <Moon className="w-5 h-5" />
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 hover:bg-bg-hover rounded-full text-text-muted hover:text-text-main transition-colors"
+              title={
+                isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"
+              }
+            >
+              {isDarkMode ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
             </button>
             <button
               onClick={toggleRightSidebar}
               className={`p-2 rounded-full transition-all ${
                 showRightSidebar
-                  ? "text-[#5956E8] bg-[#5956E8]/10"
-                  : "text-zinc-400 hover:bg-white/5"
+                  ? "text-primary bg-primary/10"
+                  : "text-text-muted hover:bg-bg-hover"
               }`}
               title={showRightSidebar ? "Hide Properties" : "Show Properties"}
             >
@@ -185,7 +195,7 @@ export function TopNav() {
 
           <button
             onClick={() => setIsExportOpen(true)}
-            className="flex items-center gap-2 bg-[#5956E8] text-white hover:bg-[#6c69ff] px-6 py-2 rounded-full font-bold text-[13px] transition-all shadow-lg active:scale-95 group"
+            className="flex items-center gap-2 bg-primary text-white hover:bg-primary/90 px-6 py-2 rounded-full font-bold text-[13px] transition-all shadow-md active:scale-95 group"
           >
             <Sparkles className="w-4 h-4 text-white group-hover:animate-pulse" />
             <span>Produce</span>

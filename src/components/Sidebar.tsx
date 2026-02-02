@@ -37,7 +37,7 @@ export function Sidebar({ activeTab = "upload", onTabChange }: SidebarProps) {
   ];
 
   return (
-    <div className="w-[72px] h-full bg-[#111114] border-r border-white/5 flex flex-col items-center py-6 gap-2 z-10 shadow-2xl relative">
+    <div className="w-[72px] h-full bg-bg-panel border-r border-border flex flex-col items-center py-6 gap-2 z-10 relative">
       {menuItems.map((item) => {
         const isActive = activeTab === item.id;
         return (
@@ -47,20 +47,20 @@ export function Sidebar({ activeTab = "upload", onTabChange }: SidebarProps) {
             className={cn(
               "flex flex-col items-center justify-center w-[60px] h-[60px] rounded-xl transition-all duration-300 relative group",
               isActive
-                ? "text-white"
-                : "text-zinc-500 hover:text-zinc-200 hover:bg-white/5",
+                ? "text-text-main"
+                : "text-text-muted hover:text-text-main hover:bg-bg-hover",
             )}
           >
             {/* Active Indicator Bar */}
             {isActive && (
-              <div className="absolute left-0 w-[3px] h-6 bg-[#5956E8] rounded-r-full shadow-[0_0_10px_rgba(89,86,232,0.8)]" />
+              <div className="absolute left-0 w-[3px] h-6 bg-primary rounded-r-full shadow-[0_0_10px_rgba(15,166,255,0.4)]" />
             )}
 
             <div
               className={cn(
                 "p-2 rounded-xl transition-all duration-300",
                 isActive &&
-                  "bg-[#5956E8]/10 shadow-[inner_0_0_10px_rgba(89,86,232,0.1)]",
+                  "bg-primary/10 shadow-[inner_0_0_10px_rgba(15,166,255,0.05)]",
               )}
             >
               <item.icon
@@ -74,8 +74,8 @@ export function Sidebar({ activeTab = "upload", onTabChange }: SidebarProps) {
               className={cn(
                 "text-[9px] font-black uppercase tracking-widest mt-1 transition-colors duration-300",
                 isActive
-                  ? "text-[#5956E8]"
-                  : "text-zinc-600 group-hover:text-zinc-400",
+                  ? "text-primary"
+                  : "text-text-muted group-hover:text-text-main",
               )}
             >
               {item.label}

@@ -1,24 +1,49 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #5956e8;
-  --color-secondary: #27272a;
-  --color-accent: #5956e8;
-  --color-bg-panel: #111114;
-  --color-bg-app: #09090b;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-text-main: #f4f4f5;
-  --color-text-muted: #a1a1aa;
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-app: var(--bg-app);
+  --color-border: var(--border);
+  --color-bg-hover: var(--bg-hover);
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
 
   --font-inter: "Inter", sans-serif;
 }
 
 :root {
-  --background: #09090b;
-  --foreground: #f4f4f5;
-  --border: rgba(255, 255, 255, 0.08);
-  --panel: #111114;
+  /* Dark Mode (Default) - Previous Indigo Branding */
+  --primary: #5956e8;
+  --secondary: #111114;
   --accent: #5956e8;
+  --bg-panel: #111114;
+  --bg-app: #09090b;
+  --border: rgba(255, 255, 255, 0.05);
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --text-main: #ffffff;
+  --text-muted: #737373;
+
+  --background: var(--bg-app);
+  --foreground: var(--text-main);
+}
+
+.light {
+  /* Light Mode - New Blue Branding */
+  --primary: #0fa6ff;
+  --secondary: #f4f4f5;
+  --accent: #0fa6ff;
+  --bg-panel: #fafafa;
+  --bg-app: #ffffff;
+  --border: #d4d4d4;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --text-main: #171717;
+  --text-muted: #737373;
+
+  --background: var(--bg-app);
+  --foreground: var(--text-main);
 }
 
 body {
@@ -48,21 +73,21 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.2);
 }
 
-/* Range slider styling - Premium Dark */
+/* Range slider styling - Premium Light */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.05);
   outline: none;
 }
 
@@ -74,7 +99,7 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 0 10px rgba(89, 86, 232, 0.5);
+  box-shadow: 0 0 10px rgba(15, 166, 255, 0.3);
   border: 2px solid white;
 }
 
@@ -85,7 +110,7 @@ input[type="range"]::-moz-range-thumb {
   background: var(--accent);
   cursor: pointer;
   border: 2px solid white;
-  box-shadow: 0 0 10px rgba(89, 86, 232, 0.5);
+  box-shadow: 0 0 10px rgba(15, 166, 255, 0.3);
 }
 
 /* Toggle switch animation */

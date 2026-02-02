@@ -18,6 +18,7 @@ export default function Home() {
   >("upload");
   const {
     viewMode,
+    isDarkMode,
     timelineHeightMode,
     timelineHeight,
     isTimelineResizing,
@@ -38,7 +39,12 @@ export default function Home() {
   }
 
   return (
-    <main className="flex flex-col h-screen w-screen bg-bg-app overflow-hidden">
+    <main
+      className={cn(
+        "flex flex-col h-screen w-screen bg-bg-app overflow-hidden",
+        isDarkMode ? "dark" : "light",
+      )}
+    >
       {!isFullscreen && <TopNav />}
 
       <div className="flex flex-1 overflow-hidden">
@@ -57,7 +63,7 @@ export default function Home() {
         )}
 
         {/* Canvas Area */}
-        <div className="flex-1 bg-[#111114] relative flex items-center justify-center overflow-hidden">
+        <div className="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
           <EditorCanvas />
         </div>
 
