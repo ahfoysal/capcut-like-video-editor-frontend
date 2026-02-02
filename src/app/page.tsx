@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { TopNav } from "@/components/TopNav";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { AssetLibrary } from "@/components/AssetLibrary";
 import { EmptyState } from "@/components/EmptyState";
@@ -15,7 +16,15 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<
     "upload" | "elements" | "text" | "media" | "live" | "more" | "layers"
   >("upload");
-  const { viewMode, isTimelineCollapsed, isFullscreen } = useEditorStore();
+  const {
+    viewMode,
+    timelineHeightMode,
+    timelineHeight,
+    isTimelineResizing,
+    isFullscreen,
+    showLeftSidebar,
+    showRightSidebar,
+  } = useEditorStore();
 
   // Enable Auto-Save
   useAutoSave(2000);
@@ -34,14 +43,14 @@ export default function Home() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        {!isFullscreen && (
+        {!isFullscreen && showLeftSidebar && (
           <div className="shrink-0 z-20 h-full">
             <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
           </div>
         )}
 
         {/* Asset Library */}
-        {!isFullscreen && (
+        {!isFullscreen && showLeftSidebar && (
           <div className="shrink-0 hidden lg:block z-10 h-full border-r border-border">
             <AssetLibrary activeTab={activeTab} />
           </div>
@@ -53,7 +62,7 @@ export default function Home() {
         </div>
 
         {/* Properties Panel */}
-        {!isFullscreen && (
+        {!isFullscreen && showRightSidebar && (
           <div className="shrink-0 hidden xl:block h-full">
             <PropertiesPanel />
           </div>
@@ -63,9 +72,18 @@ export default function Home() {
       {/* Bottom Timeline */}
       {!isFullscreen && (
         <div
-          className={`shrink-0 z-40 transition-all duration-300 ${
-            isTimelineCollapsed ? "h-14" : "h-60"
-          }`}
+          className={cn(
+            "shrink-0 z-40 transition-[height] duration-300",
+            isTimelineResizing && "transition-none",
+          )}
+          style={{
+            height:
+              timelineHeightMode === "small"
+                ? 56
+                : timelineHeightMode === "big"
+                  ? 450
+                  : timelineHeight,
+          }}
         >
           <Timeline />
         </div>

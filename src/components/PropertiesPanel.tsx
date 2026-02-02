@@ -97,21 +97,22 @@ export function PropertiesPanel() {
   if (!selectedElement) {
     return (
       <div className="w-70 h-full bg-bg-app flex flex-col border-l border-border">
-        <div className="h-14 flex items-center px-4 border-b border-border bg-bg-panel/50">
-          <span className="text-[13px] font-bold text-text-main uppercase tracking-widest">
-            Page Settings
+        <div className="h-14 flex items-center px-6 border-b border-white/5 bg-bg-panel">
+          <span className="text-[12px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-[#5956E8]" />
+            Canvas Settings
           </span>
         </div>
 
         <div className="p-4 space-y-6">
           {/* Canvas Layout Settings */}
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
-              Canvas Layout
+            <label className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-1 block">
+              Global Layout
             </label>
             <div className="space-y-3">
               <select
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs font-bold text-text-main focus:outline-none focus:bg-secondary/30 transition-all cursor-pointer"
+                className="w-full px-4 py-3 bg-white/3 border border-white/5 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-[#5956E8]/40 focus:border-[#5956E8]/40 transition-all cursor-pointer appearance-none"
                 value={currentPage?.layout || "16:9"}
                 onChange={(e) => {
                   if (currentPageId) {
@@ -129,12 +130,12 @@ export function PropertiesPanel() {
                   }
                 }}
               >
-                <option value="16:9">16:9 (Landscape)</option>
-                <option value="9:16">9:16 (Portrait)</option>
-                <option value="1:1">1:1 (Square)</option>
-                <option value="4:5">4:5 (Vertical)</option>
-                <option value="2:3">2:3 (Vertical)</option>
-                <option value="custom">Custom Size</option>
+                <option value="16:9">16:9 Landscape</option>
+                <option value="9:16">9:16 Portrait</option>
+                <option value="1:1">1:1 Square</option>
+                <option value="4:5">4:5 Vertical</option>
+                <option value="2:3">2:3 Vertical</option>
+                <option value="custom">Custom Dimensions</option>
               </select>
 
               {currentPage?.layout === "custom" && (
@@ -188,26 +189,26 @@ export function PropertiesPanel() {
 
           {/* Global Page Duration */}
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
-              Total Duration
+            <label className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">
+              Scene Duration
             </label>
-            <div className="flex items-center justify-between p-3 bg-secondary/10 rounded-xl border border-border">
-              <div className="flex items-center gap-2">
-                <Clock size={16} className="text-accent" />
-                <span className="text-sm font-bold text-text-main">
+            <div className="flex items-center justify-between p-4 bg-white/2 rounded-xl border border-white/5">
+              <div className="flex items-center gap-3">
+                <Clock size={16} className="text-[#5956E8]" />
+                <span className="text-sm font-black text-white tabular-nums">
                   {currentPage?.duration}s
                 </span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handlePageDurationChange(-5)}
-                  className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-text-muted hover:text-text-main"
+                  onClick={() => handlePageDurationChange(-1)}
+                  className="w-8 h-8 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-lg transition-all text-zinc-400 hover:text-white"
                 >
                   <Minus size={14} />
                 </button>
                 <button
-                  onClick={() => handlePageDurationChange(5)}
-                  className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-text-muted hover:text-text-main"
+                  onClick={() => handlePageDurationChange(1)}
+                  className="w-8 h-8 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-lg transition-all text-zinc-400 hover:text-white"
                 >
                   <Plus size={14} />
                 </button>
@@ -215,16 +216,16 @@ export function PropertiesPanel() {
             </div>
           </div>
 
-          <div className="flex flex-col items-center justify-center pt-24 text-text-muted space-y-4">
-            <div className="w-16 h-16 rounded-full bg-secondary/10 flex items-center justify-center border border-border/50">
-              <Sliders size={24} className="text-text-muted/50" />
+          <div className="flex flex-col items-center justify-center pt-20 text-text-muted space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-[#5956E8]/5 flex items-center justify-center border border-[#5956E8]/10 animate-pulse">
+              <Sliders size={24} className="text-[#5956E8]/30" />
             </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-text-main">
-                No item selected
+            <div className="text-center space-y-2">
+              <p className="text-sm font-black text-white uppercase tracking-widest">
+                No selection
               </p>
-              <p className="text-[11px] font-medium leading-relaxed max-w-[160px] mx-auto mt-1">
-                Select an element on the canvas to edit its properties
+              <p className="text-[11px] font-medium text-zinc-500 leading-relaxed max-w-[170px] mx-auto">
+                Pick an object on the canvas to configure its settings.
               </p>
             </div>
           </div>
@@ -235,35 +236,33 @@ export function PropertiesPanel() {
 
   return (
     <div className="w-70 h-full bg-bg-app flex flex-col border-l border-border animate-in slide-in-from-right duration-500">
-      <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-bg-panel/20">
-        <span className="text-[13px] font-bold flex items-center gap-2 uppercase tracking-wide">
+      <div className="h-14 flex items-center justify-between px-6 border-b border-white/5 bg-bg-panel">
+        <span className="text-[12px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
           {selectedElement.type === "text" && (
-            <Type className="w-4 h-4 text-accent" />
+            <Type className="w-4 h-4 text-[#5956E8]" />
           )}
           {selectedElement.type === "image" && (
-            <ImageIcon className="w-4 h-4 text-accent" />
+            <ImageIcon className="w-4 h-4 text-[#5956E8]" />
           )}
           {selectedElement.type === "video" && (
-            <Video className="w-4 h-4 text-accent" />
+            <Video className="w-4 h-4 text-[#5956E8]" />
           )}
           {selectedElement.type === "audio" && (
-            <Music className="w-4 h-4 text-accent" />
+            <Music className="w-4 h-4 text-[#5956E8]" />
           )}
-          <span className="text-text-main">{selectedElement.type}</span>
+          {selectedElement.type} Settings
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleDelete}
-            className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors group relative"
+            className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+            title="Delete Element"
           >
             <Trash2 className="w-4 h-4" />
-            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-              Delete
-            </span>
           </button>
           <button
             onClick={() => setSelectedElement(null)}
-            className="p-2 text-text-muted hover:bg-white/5 rounded-lg transition-colors"
+            className="p-2 text-zinc-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
           >
             <X className="w-4 h-4" />
           </button>
@@ -275,20 +274,21 @@ export function PropertiesPanel() {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={handleSplit}
-            className="col-span-2 flex items-center justify-center gap-2 w-full py-2.5 bg-white text-black text-xs font-bold rounded-xl hover:bg-gray-200 transition-all active:scale-95"
+            className="col-span-2 flex items-center justify-center gap-2 w-full py-3 bg-[#5956E8] text-white text-[11px] font-black uppercase tracking-widest rounded-xl hover:bg-[#6a67ff] transition-all active:scale-95 shadow-[0_0_20px_rgba(89,86,232,0.2)]"
           >
             <Scissors size={14} />
-            Split at Playhead
+            Split Element
           </button>
+
           <button
             onClick={() => handleLayerChange("front")}
-            className="flex items-center justify-center gap-2 py-2 bg-secondary/20 border border-border text-[10px] font-bold rounded-lg hover:bg-secondary/30 transition-all text-text-main"
+            className="flex items-center justify-center gap-2 py-2.5 bg-white/[0.03] border border-white/5 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-white/5 transition-all text-white"
           >
             Bring Front
           </button>
           <button
             onClick={() => handleLayerChange("back")}
-            className="flex items-center justify-center gap-2 py-2 bg-secondary/20 border border-border text-[10px] font-bold rounded-lg hover:bg-secondary/30 transition-all text-text-main"
+            className="flex items-center justify-center gap-2 py-2.5 bg-white/[0.03] border border-white/5 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-white/5 transition-all text-white"
           >
             Send Back
           </button>
@@ -298,10 +298,10 @@ export function PropertiesPanel() {
             selectedElement.type === "audio") && (
             <button
               onClick={() => setIsMediaModalOpen(true)}
-              className="col-span-2 flex items-center justify-center gap-2 w-full py-2.5 bg-accent/20 border border-accent/30 text-accent text-xs font-bold rounded-xl hover:bg-accent/30 transition-all active:scale-95"
+              className="col-span-2 flex items-center justify-center gap-2 w-full py-3 bg-white/5 border border-white/10 text-white text-[11px] font-black uppercase tracking-widest rounded-xl hover:bg-white/10 transition-all active:scale-95 mt-1"
             >
               <Crop size={14} />
-              Crop / Trim Media
+              Edit Media Clips
             </button>
           )}
         </div>
@@ -310,12 +310,12 @@ export function PropertiesPanel() {
         {(selectedElement.type === "image" ||
           selectedElement.type === "video") && (
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
+            <label className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">
               {currentPage?.gridMode && selectedElement.gridCell
-                ? "Fit to Cell"
-                : "Full Canvas"}
+                ? "Cell Alignment"
+                : "Fill Mode"}
             </label>
-            <div className="flex items-center gap-1 border border-border rounded-xl p-1 bg-secondary/10">
+            <div className="flex items-center gap-1 border border-white/5 rounded-xl p-1.5 bg-bg-panel">
               <button
                 onClick={() => {
                   let targetPos = { x: 0, y: 0 };
@@ -352,13 +352,15 @@ export function PropertiesPanel() {
                 }}
                 title="Fill frame – covers area, may crop"
                 className={cn(
-                  "flex-1 py-2 flex flex-col items-center gap-0.5 hover:bg-white/10 rounded-lg transition-all text-text-muted",
+                  "flex-1 py-2.5 flex flex-col items-center gap-1 hover:bg-white/5 rounded-lg transition-all text-zinc-500",
                   (selectedElement as any).fill === "fill" &&
-                    "bg-white/10 text-accent",
+                    "bg-[#5956E8]/10 text-[#5956E8]",
                 )}
               >
                 <Crop size={14} />
-                <span className="text-[9px] font-bold">Fill</span>
+                <span className="text-[9px] font-black uppercase tracking-tighter">
+                  Fill
+                </span>
               </button>
               <button
                 onClick={() => {
@@ -396,14 +398,16 @@ export function PropertiesPanel() {
                 }}
                 title="Fit frame – entire media visible"
                 className={cn(
-                  "flex-1 py-2 flex flex-col items-center gap-0.5 hover:bg-white/10 rounded-lg transition-all text-text-muted",
+                  "flex-1 py-2.5 flex flex-col items-center gap-1 hover:bg-white/5 rounded-lg transition-all text-zinc-500",
                   ((selectedElement as any).fill === "fit" ||
                     !(selectedElement as any).fill) &&
-                    "bg-white/10 text-accent",
+                    "bg-[#5956E8]/10 text-[#5956E8]",
                 )}
               >
                 <Maximize2 size={14} />
-                <span className="text-[9px] font-bold">Fit</span>
+                <span className="text-[9px] font-black uppercase tracking-tighter">
+                  Fit
+                </span>
               </button>
               <button
                 onClick={() => {
@@ -445,13 +449,15 @@ export function PropertiesPanel() {
                 }}
                 title="Stretch frame – fills area, may distort"
                 className={cn(
-                  "flex-1 py-2 flex flex-col items-center gap-0.5 hover:bg-white/10 rounded-lg transition-all text-text-muted",
+                  "flex-1 py-2.5 flex flex-col items-center gap-1 hover:bg-white/5 rounded-lg transition-all text-zinc-500",
                   (selectedElement as any).fill === "stretch" &&
-                    "bg-white/10 text-accent",
+                    "bg-[#5956E8]/10 text-[#5956E8]",
                 )}
               >
                 <Move size={14} />
-                <span className="text-[9px] font-bold">Stretch</span>
+                <span className="text-[9px] font-black uppercase tracking-tighter">
+                  Stretch
+                </span>
               </button>
             </div>
 
@@ -512,34 +518,34 @@ export function PropertiesPanel() {
 
         {/* Timing Control */}
         <div className="space-y-3">
-          <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
-            Timing & Duration
+          <label className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">
+            Timeline Presence
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-text-muted font-bold ml-1">
-                START (S)
+          <div className="grid grid-cols-2 gap-2 mt-1">
+            <div className="space-y-1.5 p-3 bg-white/2 border border-white/5 rounded-xl">
+              <span className="text-[8px] text-[#5956E8] font-black uppercase tracking-widest">
+                START TIME
               </span>
               <input
                 type="number"
                 step="0.1"
                 min="0"
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-mono font-bold text-text-main"
+                className="w-full bg-transparent border-none text-[13px] outline-none font-black text-white p-0 tabular-nums"
                 value={selectedElement.startTime}
                 onChange={(e) =>
                   handleUpdate({ startTime: parseFloat(e.target.value) || 0 })
                 }
               />
             </div>
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-text-muted font-bold ml-1">
-                LEN (S)
+            <div className="space-y-1.5 p-3 bg-white/[0.02] border border-white/5 rounded-xl">
+              <span className="text-[8px] text-[#5956E8] font-black uppercase tracking-widest">
+                DURATION
               </span>
               <input
                 type="number"
                 step="0.1"
                 min="0.1"
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-mono font-bold text-text-main"
+                className="w-full bg-transparent border-none text-[13px] outline-none font-black text-white p-0 tabular-nums"
                 value={selectedElement.duration}
                 onChange={(e) =>
                   handleUpdate({ duration: parseFloat(e.target.value) || 0.1 })
@@ -551,17 +557,17 @@ export function PropertiesPanel() {
 
         {/* Common: Dimensions */}
         <div className="space-y-3">
-          <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
-            Dimensions & Layout
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">
+            Position & Size
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-text-muted font-bold ml-1">
-                X POS
+          <div className="grid grid-cols-2 gap-2 mt-1">
+            <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+              <span className="text-[8px] text-zinc-600 font-black uppercase tracking-widest block">
+                X Position
               </span>
               <input
                 type="number"
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-bold text-text-main"
+                className="w-full bg-transparent border-none text-[13px] outline-none font-bold text-white p-0"
                 value={Math.round(selectedElement.position.x)}
                 onChange={(e) =>
                   handleUpdate({
@@ -573,13 +579,13 @@ export function PropertiesPanel() {
                 }
               />
             </div>
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-text-muted font-bold ml-1">
-                Y POS
+            <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+              <span className="text-[8px] text-zinc-600 font-black uppercase tracking-widest block">
+                Y Position
               </span>
               <input
                 type="number"
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-bold text-text-main"
+                className="w-full bg-transparent border-none text-[13px] outline-none font-bold text-white p-0"
                 value={Math.round(selectedElement.position.y)}
                 onChange={(e) =>
                   handleUpdate({
@@ -591,13 +597,13 @@ export function PropertiesPanel() {
                 }
               />
             </div>
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-text-muted font-bold ml-1">
-                WIDTH
+            <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+              <span className="text-[8px] text-zinc-600 font-black uppercase tracking-widest block">
+                Width
               </span>
               <input
                 type="number"
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-bold text-text-main"
+                className="w-full bg-transparent border-none text-[13px] outline-none font-bold text-white p-0"
                 value={Math.round(selectedElement.size.width)}
                 onChange={(e) =>
                   handleUpdate({
@@ -609,13 +615,13 @@ export function PropertiesPanel() {
                 }
               />
             </div>
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-text-muted font-bold ml-1">
-                HEIGHT
+            <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+              <span className="text-[8px] text-zinc-600 font-black uppercase tracking-widest block">
+                Height
               </span>
               <input
                 type="number"
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-bold text-text-main"
+                className="w-full bg-transparent border-none text-[13px] outline-none font-bold text-white p-0"
                 value={Math.round(selectedElement.size.height)}
                 onChange={(e) =>
                   handleUpdate({
@@ -632,14 +638,14 @@ export function PropertiesPanel() {
 
         {/* Text Specific properties */}
         {selectedElement.type === "text" && (
-          <div className="space-y-3">
-            <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
-              Text Content & Style
+          <div className="space-y-4">
+            <label className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">
+              Typography Style
             </label>
             <div className="space-y-3">
               <textarea
-                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-[13px] focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all min-h-[100px] resize-none font-medium leading-relaxed text-text-main"
-                placeholder="Enter text here..."
+                className="w-full px-4 py-3 bg-white/[0.03] border border-white/5 rounded-xl text-[13px] font-medium leading-relaxed text-white focus:outline-none focus:ring-2 focus:ring-[#5956E8]/40 focus:border-[#5956E8]/40 transition-all min-h-25 resize-none placeholder-zinc-700"
+                placeholder="Type something amazing..."
                 value={(selectedElement as any).content || ""}
                 onChange={(e) => handleUpdate({ content: e.target.value })}
               />

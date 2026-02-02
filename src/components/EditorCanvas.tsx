@@ -16,7 +16,7 @@ import {
 import { useEditorStore } from "@/store/editorStore";
 import { GridOverlay } from "@/components/GridOverlay";
 import { LayoutSelector } from "@/components/LayoutSelector";
-import { GridCell, snapToCell } from "@/lib/gridLayouts";
+import { GridCell, snapToCell, getCellBoundaries } from "@/lib/gridLayouts";
 import { Element } from "@/types/editor";
 
 const generateElementId = () => `el-${Math.random().toString(36).substr(2, 9)}`;
@@ -116,10 +116,15 @@ const CanvasElement = React.memo(
     currentPageId,
     isDragging,
     isObscuring,
+    zoom,
+    hasMoved,
   }: {
-    element: any;
+    element: Element;
     isSelected: boolean;
     isDragging: boolean;
+    isObscuring?: boolean;
+    hasMoved?: boolean;
+    zoom: number;
     handleMouseDown: (
       e: React.MouseEvent,
       element: any,
@@ -136,7 +141,6 @@ const CanvasElement = React.memo(
       updates: Record<string, any>,
     ) => void;
     currentPageId: string | undefined;
-    isObscuring?: boolean;
   }) => {
     const getAssetUrl = (url?: string) => {
       if (!url) return "";
@@ -168,8 +172,9 @@ const CanvasElement = React.memo(
         className={cn(
           "absolute select-none group/el",
           isSelected &&
-            "ring-[3px] ring-accent z-50 shadow-[0_0_15px_rgba(59,130,246,0.5)]",
-          isDragging && "pointer-events-none opacity-50",
+            "ring-[1.5px] ring-[#5956E8] z-50 shadow-[0_0_20px_rgba(89,86,232,0.3)]",
+          isDragging && hasMoved && "pointer-events-none opacity-50",
+          !hasMoved && isDragging && "opacity-80",
           isObscuring &&
             "opacity-20 pointer-events-none transition-opacity duration-300", // X-ray effect
         )}
@@ -186,22 +191,60 @@ const CanvasElement = React.memo(
       >
         {/* Element Toolbar */}
         {isSelected && !isDragging && (
-          <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white rounded-lg shadow-xl border border-gray-100 p-1 z-[100] animate-in slide-in-from-bottom-2 fade-in duration-200">
+          <div
+            className="absolute -top-12 left-1/2 flex items-center gap-1 bg-white rounded-lg shadow-xl border border-gray-100 p-1 z-[100] animate-in slide-in-from-bottom-2 fade-in duration-200"
+            style={{
+              transform: `translateX(-50%) scale(${100 / zoom})`,
+              transformOrigin: "bottom center",
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
               title="Replace"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                useEditorStore.getState().setActiveLeftTab("upload");
+              }}
             >
               <ImageIcon className="w-4 h-4" />
             </button>
             <button
               className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
               title="Fit to Canvas"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (currentPageId) {
+                  updateElement(currentPageId, element.id, {
+                    position: { x: 0, y: 0 },
+                    size: { width: 1920, height: 1080 },
+                    gridCell: null,
+                  });
+                }
+              }}
             >
               <Maximize2 className="w-4 h-4" />
             </button>
             <button
-              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors bg-blue-50 text-blue-600"
-              title="Crop"
+              className={cn(
+                "p-1.5 rounded-md transition-colors",
+                (element as any).fill === "fit"
+                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  : "hover:bg-gray-100 text-gray-700",
+              )}
+              title="Toggle Fit/Fill"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (currentPageId) {
+                  updateElement(currentPageId, element.id, {
+                    fill: (element as any).fill === "fit" ? "cover" : "fit",
+                  } as any);
+                }
+              }}
             >
               <Crop className="w-4 h-4" />
             </button>
@@ -232,7 +275,11 @@ const CanvasElement = React.memo(
         {/* Rotation Handle */}
         {isSelected && !isDragging && (
           <div
-            className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-6 h-6 bg-white rounded-full shadow-lg border border-gray-200 flex items-center justify-center cursor-move hover:scale-110 transition-transform z-[100]"
+            className="absolute -bottom-8 left-1/2 w-6 h-6 bg-white rounded-full shadow-lg border border-gray-200 flex items-center justify-center cursor-move hover:scale-110 transition-transform z-[100]"
+            style={{
+              transform: `translateX(-50%) scale(${100 / zoom})`,
+              transformOrigin: "top center",
+            }}
             onMouseDown={(e) => handleMouseDown(e, element, "rotate")}
           >
             <RotateCw className="w-3 h-3 text-gray-600" />
@@ -254,10 +301,23 @@ const CanvasElement = React.memo(
                   (!(element as any).naturalWidth ||
                     !(element as any).naturalHeight)
                 ) {
-                  updateElement(currentPageId, element.id, {
+                  const updates: any = {
                     naturalWidth: img.naturalWidth,
                     naturalHeight: img.naturalHeight,
-                  } as any);
+                  };
+
+                  // ALWAYS adjust height to match natural aspect ratio on first load if not in a grid cell
+                  // This prevents the fixed 400x300 container from cropping the image
+                  if (!element.gridCell) {
+                    updates.size = {
+                      width: element.size.width,
+                      height:
+                        (element.size.width * img.naturalHeight) /
+                        img.naturalWidth,
+                    };
+                  }
+
+                  updateElement(currentPageId, element.id, updates);
                 }
               }}
               className={cn(
@@ -530,37 +590,37 @@ const CanvasElement = React.memo(
           <>
             {/* Corners */}
             <div
-              className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-nw-resize hover:scale-125 transition-transform"
+              className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-[1.5px] border-[#5956E8] rounded-full shadow-md z-50 cursor-nw-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "nw")}
             />
             <div
-              className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-ne-resize hover:scale-125 transition-transform"
+              className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-[1.5px] border-[#5956E8] rounded-full shadow-md z-50 cursor-ne-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "ne")}
             />
             <div
-              className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-sw-resize hover:scale-125 transition-transform"
+              className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-[1.5px] border-[#5956E8] rounded-full shadow-md z-50 cursor-sw-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "sw")}
             />
             <div
-              className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-se-resize hover:scale-125 transition-transform"
+              className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-[1.5px] border-[#5956E8] rounded-full shadow-md z-50 cursor-se-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "se")}
             />
 
             {/* Sides */}
             <div
-              className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-w-resize hover:scale-125 transition-transform"
+              className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2.5 h-2.5 bg-white border-[2px] border-[#5956E8] rounded-full shadow-md z-50 cursor-w-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "w")}
             />
             <div
-              className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-e-resize hover:scale-125 transition-transform"
+              className="absolute bottom-1/2 -right-1.5 translate-y-1/2 w-2.5 h-2.5 bg-white border-[2px] border-[#5956E8] rounded-full shadow-md z-50 cursor-e-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "e")}
             />
             <div
-              className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-n-resize hover:scale-125 transition-transform"
+              className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border-[2px] border-[#5956E8] rounded-full shadow-md z-50 cursor-n-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "n")}
             />
             <div
-              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-accent rounded-full shadow-lg z-50 cursor-s-resize hover:scale-125 transition-transform"
+              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border-[2px] border-[#5956E8] rounded-full shadow-md z-50 cursor-s-resize hover:scale-125 transition-transform"
               onMouseDown={(e) => handleMouseDown(e, element, "resize", "s")}
             />
           </>
@@ -688,18 +748,33 @@ export function EditorCanvas() {
     centerY?: number;
     type: "move" | "resize" | "rotate";
     handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se";
+    hasMoved?: boolean;
   } | null>(null);
 
   const handleMouseDown = (
     e: React.MouseEvent,
     element: Element,
-    type: "move" | "resize",
+    type: "move" | "resize" | "rotate",
     handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se",
   ) => {
     e.preventDefault();
     e.stopPropagation();
     pushHistory(); // Record state before changes
     setSelectedElement(element.id);
+    let centerX = 0;
+    let centerY = 0;
+
+    if (type === "rotate") {
+      const el = (e.target as HTMLElement).closest(
+        `[data-element-id="${element.id}"]`,
+      );
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        centerX = rect.left + rect.width / 2;
+        centerY = rect.top + rect.height / 2;
+      }
+    }
+
     setDragState({
       id: element.id,
       startX: e.clientX,
@@ -710,6 +785,9 @@ export function EditorCanvas() {
       initialHeight: element.size.height,
       initialObjectPosition: element.objectPosition || { x: 50, y: 50 },
       initialCrop: element.crop || { x: 0, y: 0, width: 100, height: 100 },
+      initialRotation: element.rotation || 0,
+      centerX,
+      centerY,
       type,
       handleType,
     });
@@ -741,8 +819,31 @@ export function EditorCanvas() {
       const dx = (e.clientX - dragState.startX) / scale;
       const dy = (e.clientY - dragState.startY) / scale;
 
+      // Set hasMoved if we've moved more than 3 pixels
+      if (!dragState.hasMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        setDragState((prev) => (prev ? { ...prev, hasMoved: true } : null));
+      }
+
       const element = allElements.find((el) => el.id === dragState.id);
       if (!element) return;
+
+      if (dragState.type === "rotate") {
+        const rotation = calculateRotation(
+          dragState.startX,
+          dragState.startY,
+          e.clientX,
+          e.clientY,
+          dragState.centerX!,
+          dragState.centerY!,
+        );
+
+        const newRotation = (dragState.initialRotation! + rotation) % 360;
+
+        throttledUpdateElement(currentPageId, dragState.id, {
+          rotation: newRotation,
+        });
+        return;
+      }
 
       // Cross-page dragging check
       if (dragState.type === "move") {
@@ -794,28 +895,96 @@ export function EditorCanvas() {
         let newX = dragState.initialX + dx;
         let newY = dragState.initialY + dy;
 
-        // Snap to grid if enabled (for elements not currently in a grid cell)
+        // Grid Mode Logic
         if (currentPage?.gridMode && currentPage?.gridLayout) {
-          const snapped = snapToCell(
-            newX + element.size.width / 2, // Snap center of element
-            newY + element.size.height / 2,
-            TOTAL_WIDTH,
-            TOTAL_HEIGHT,
-            currentPage.gridLayout,
-          );
+          // If the element is already in a grid cell, we handle panning (within cell) or swapping (outside cell)
+          if (element.gridCell) {
+            const currentCellId = element.gridCell?.cellId;
+            const currentCell = currentPage.gridLayout.cells.find(
+              (c) => c.id === currentCellId,
+            );
+            if (currentCell) {
+              const boundaries = getCellBoundaries(
+                currentCell,
+                TOTAL_WIDTH,
+                TOTAL_HEIGHT,
+                currentPage.gridLayout,
+              );
 
-          if (snapped) {
-            newX = snapped.x;
-            newY = snapped.y;
-            newSize = { width: snapped.width, height: snapped.height };
-            gridCell = {
-              cellId: snapped.cell.id,
-              col: snapped.cell.col,
-              row: snapped.cell.row,
-            };
+              // Normalize mouse position to canvas scale
+              const canvasRect = e.currentTarget.getBoundingClientRect();
+              const mouseX = (e.clientX - canvasRect.left) / scale;
+              const mouseY = (e.clientY - canvasRect.top) / scale;
 
-            // Highlight hovered cell
-            setHoveredCell(snapped.cell);
+              // Check if mouse is still in the current cell
+              const inCurrentCell =
+                mouseX >= boundaries.x &&
+                mouseX <= boundaries.x + boundaries.width &&
+                mouseY >= boundaries.y &&
+                mouseY <= boundaries.y + boundaries.height;
+
+              if (inCurrentCell) {
+                // PANNING: Adjust objectPosition instead of move
+                const initPos = dragState.initialObjectPosition || {
+                  x: 50,
+                  y: 50,
+                };
+                // Reverse dx/dy for panning (drag right moves content right, meaning objectPosition.x increases or crop shifts)
+                // Actually objectPosition is usually center-relative or percentage.
+                // Let's use objectPosition for panning
+                const pDeltaX = (dx / element.size.width) * 100;
+                const pDeltaY = (dy / element.size.height) * 100;
+
+                throttledUpdateElement(currentPageId, dragState.id, {
+                  objectPosition: {
+                    x: Math.max(0, Math.min(100, initPos.x + pDeltaX)),
+                    y: Math.max(0, Math.min(100, initPos.y + pDeltaY)),
+                  },
+                });
+                return;
+              } else {
+                // SWAPPING: Mouse moved out of cell, try to find a NEW cell
+                const snapped = snapToCell(
+                  mouseX,
+                  mouseY,
+                  TOTAL_WIDTH,
+                  TOTAL_HEIGHT,
+                  currentPage.gridLayout,
+                );
+                if (snapped && snapped.cell.id !== element.gridCell.cellId) {
+                  newX = snapped.x;
+                  newY = snapped.y;
+                  newSize = { width: snapped.width, height: snapped.height };
+                  gridCell = {
+                    cellId: snapped.cell.id,
+                    col: snapped.cell.col,
+                    row: snapped.cell.row,
+                  };
+                  setHoveredCell(snapped.cell);
+                }
+              }
+            }
+          } else {
+            // Standard snap logic for free elements moving INTO the grid
+            const snapped = snapToCell(
+              newX + element.size.width / 2,
+              newY + element.size.height / 2,
+              TOTAL_WIDTH,
+              TOTAL_HEIGHT,
+              currentPage.gridLayout,
+            );
+
+            if (snapped) {
+              newX = snapped.x;
+              newY = snapped.y;
+              newSize = { width: snapped.width, height: snapped.height };
+              gridCell = {
+                cellId: snapped.cell.id,
+                col: snapped.cell.col,
+                row: snapped.cell.row,
+              };
+              setHoveredCell(snapped.cell);
+            }
           }
         }
 
@@ -1392,7 +1561,9 @@ export function EditorCanvas() {
       const hasVisuals = allElements.some(
         (el) => el.type === "image" || el.type === "video",
       );
-      const defaultFill = hasVisuals ? "fill" : "fit";
+      // Default to fit for images to preserve aspect ratio, cover for videos/others if visuals exist
+      const defaultFill =
+        asset.type === "image" ? "fit" : hasVisuals ? "fill" : "fit";
 
       if (asset.type === "image") {
         newElement.src = asset.url || asset.src;
@@ -1439,7 +1610,7 @@ export function EditorCanvas() {
   return (
     <div
       className={cn(
-        "w-full h-full flex flex-col items-center justify-center bg-[#111114] overflow-auto relative",
+        "w-full h-full flex flex-col items-center justify-center bg-[#111114] relative",
         isFullscreen ? "p-0" : "p-8",
       )}
       onMouseMove={handleMouseMove}
@@ -1453,212 +1624,250 @@ export function EditorCanvas() {
           useEditorStore.getState().setZoom(zoom + delta);
         }
       }}
+      onMouseDown={(e) => {
+        // Only deselect if we clicked the background div directly
+        if (e.target === e.currentTarget) {
+          setSelectedElement(null);
+          setShowLayoutSelector(false);
+        }
+      }}
     >
-      {/* Grid Toggle Button - Top Left */}
-      <div className="absolute top-6 left-6 z-10 flex flex-col gap-2">
-        <button
-          onClick={() => setShowLayoutSelector(true)}
-          className={cn(
-            "h-10 rounded-lg border-2 transition-all flex items-center justify-center shadow-lg backdrop-blur-md px-3 gap-2",
-            currentPage?.gridMode && currentPage?.gridLayout?.id !== "single"
-              ? "bg-[#5956E8] border-[#5956E8] text-white min-w-12"
-              : "bg-white/80 border-white/20 text-gray-600 hover:border-[#5956E8] hover:text-[#5956E8] w-10 px-0",
-          )}
-          title="Change Grid Layout"
+      {/* FIXED UI OVERLAY */}
+      <div className="absolute inset-0 pointer-events-none z-20">
+        {/* Grid Toggle Button - Top Left */}
+        <div
+          className="absolute top-6 left-6 flex flex-col gap-2 pointer-events-auto"
+          onMouseDown={(e) => e.stopPropagation()}
         >
-          {currentPage?.gridMode &&
-          currentPage?.gridLayout &&
-          currentPage.gridLayout.id !== "single" ? (
-            <span className="text-[10px] font-bold uppercase whitespace-nowrap">
-              {currentPage.gridLayout.type === "2col"
-                ? "2 COL"
-                : currentPage.gridLayout.type === "3col"
-                  ? "3 COL"
-                  : currentPage.gridLayout.type === "2row"
-                    ? "2 ROW"
-                    : currentPage.gridLayout.type === "sidebar-left"
-                      ? "SIDE L"
-                      : currentPage.gridLayout.type === "sidebar-right"
-                        ? "SIDE R"
-                        : currentPage.gridLayout.type === "header-2col"
-                          ? "HEAD 2"
-                          : currentPage.gridLayout.type === "header-footer"
-                            ? "H + F"
-                            : currentPage.gridLayout.name.replace("Grid ", "")}
-            </span>
-          ) : (
-            <Grid3x3 className="w-5 h-5" />
-          )}
-        </button>
-      </div>
-
-      {/* Full Screen Player Controls */}
-      {isFullscreen && (
-        <div className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/90 via-black/60 to-transparent z-[60] flex flex-col justify-end px-8 pb-8 animate-in slide-in-from-bottom-5 duration-300 pointer-events-auto group">
-          {/* Progress Bar */}
-          <div
-            className="w-full h-1 bg-white/20 rounded-full mb-4 cursor-pointer relative group/progress hover:h-1.5 transition-all"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const percent = (e.clientX - rect.left) / rect.width;
-              setTimelinePosition(percent * (currentPage?.duration || 10));
-            }}
+          <button
+            onClick={() => setShowLayoutSelector(true)}
+            className={cn(
+              "h-10 rounded-lg border-2 transition-all flex items-center justify-center shadow-lg backdrop-blur-md px-3 gap-2",
+              currentPage?.gridMode && currentPage?.gridLayout?.id !== "single"
+                ? "bg-[#5956E8] border-[#5956E8] text-white min-w-12"
+                : "bg-white/80 border-white/20 text-gray-600 hover:border-[#5956E8] hover:text-[#5956E8] w-10 px-0",
+            )}
+            title="Change Grid Layout"
           >
-            {/* Progress Fill */}
-            <div
-              className="absolute top-0 left-0 h-full bg-accent rounded-full transition-all duration-75 ease-linear"
-              style={{
-                width: `${(timelinePosition / (currentPage?.duration || 10)) * 100}%`,
-              }}
-            />
-            {/* Scrubber Knob (visible on hover) */}
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/progress:opacity-100 transition-opacity"
-              style={{
-                left: `${(timelinePosition / (currentPage?.duration || 10)) * 100}%`,
-                transform: `translate(-50%, -50%)`,
-              }}
-            />
-          </div>
+            {currentPage?.gridMode &&
+            currentPage?.gridLayout &&
+            currentPage.gridLayout.id !== "single" ? (
+              <span className="text-[10px] font-bold uppercase whitespace-nowrap">
+                {currentPage.gridLayout.type === "2col"
+                  ? "2 COL"
+                  : currentPage.gridLayout.type === "3col"
+                    ? "3 COL"
+                    : currentPage.gridLayout.type === "2row"
+                      ? "2 ROW"
+                      : currentPage.gridLayout.type === "sidebar-left"
+                        ? "SIDE L"
+                        : currentPage.gridLayout.type === "sidebar-right"
+                          ? "SIDE R"
+                          : currentPage.gridLayout.type === "header-2col"
+                            ? "HEAD 2"
+                            : currentPage.gridLayout.type === "header-footer"
+                              ? "H + F"
+                              : currentPage.gridLayout.name.replace(
+                                  "Grid ",
+                                  "",
+                                )}
+              </span>
+            ) : (
+              <Grid3x3 className="w-5 h-5" />
+            )}
+          </button>
+        </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={togglePlay}
-                className="w-10 h-10 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 active:scale-95 transition-all"
-              >
-                {isPlaying ? (
-                  <Pause className="w-4 h-4 fill-current" />
-                ) : (
-                  <Play className="w-4 h-4 fill-current ml-0.5" />
-                )}
-              </button>
-
-              <div className="flex items-center gap-2 font-mono text-sm font-bold text-white select-none">
-                <span>{formatTime(timelinePosition)}</span>
-                <span className="text-white/50">/</span>
-                <span className="text-white/50">
-                  {formatTime(currentPage?.duration || 10)}
-                </span>
-              </div>
+        {/* Full Screen Player Controls */}
+        {isFullscreen && (
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col justify-end px-8 pb-8 animate-in slide-in-from-bottom-5 duration-300 pointer-events-auto group"
+          >
+            {/* Progress Bar */}
+            <div
+              className="w-full h-1 bg-white/20 rounded-full mb-4 cursor-pointer relative group/progress hover:h-1.5 transition-all"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                setTimelinePosition(percent * (currentPage?.duration || 10));
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Progress Fill */}
+              <div
+                className="absolute top-0 left-0 h-full bg-accent rounded-full transition-all duration-75 ease-linear"
+                style={{
+                  width: `${(timelinePosition / (currentPage?.duration || 10)) * 100}%`,
+                }}
+              />
+              {/* Scrubber Knob (visible on hover) */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/progress:opacity-100 transition-opacity"
+                style={{
+                  left: `${(timelinePosition / (currentPage?.duration || 10)) * 100}%`,
+                  transform: `translate(-50%, -50%)`,
+                }}
+              />
             </div>
 
-            <button
-              onClick={toggleFullscreen}
-              className="p-2 hover:bg-white/10 text-white rounded-lg transition-colors"
-              title="Exit Full Screen"
-            >
-              <Minimize className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={togglePlay}
+                  className="w-10 h-10 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 active:scale-95 transition-all"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-4 h-4 fill-current" />
+                  ) : (
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
+                  )}
+                </button>
 
-      {/* Layout Selector Modal */}
+                <div className="flex items-center gap-2 font-mono text-sm font-bold text-white select-none">
+                  <span>{formatTime(timelinePosition)}</span>
+                  <span className="text-white/50">/</span>
+                  <span className="text-white/50">
+                    {formatTime(currentPage?.duration || 10)}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={toggleFullscreen}
+                className="p-2 hover:bg-white/10 text-white rounded-lg transition-colors"
+                title="Exit Full Screen"
+              >
+                <Minimize className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <LayoutSelector
         isOpen={showLayoutSelector}
         onClose={() => setShowLayoutSelector(false)}
         onSelectLayout={(layout) => {
           setPageGridLayout(currentPageId, layout);
-          // If "Single" is selected, effectively turn off grid mode (no overlay)
           setGridMode(currentPageId, layout.id !== "single");
         }}
         currentLayout={currentPage?.gridLayout || null}
       />
-      {/* Canvas Container */}
+
+      {/* SCROLLABLE CANVAS AREA */}
       <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        style={{
-          width: `${TOTAL_WIDTH}px`,
-          height: `${TOTAL_HEIGHT}px`,
-          transform: `scale(${zoom / 100})`,
-          transformOrigin: "center center",
-          flexShrink: 0,
+        className="flex-1 w-full overflow-auto flex items-center justify-center"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            setSelectedElement(null);
+            setShowLayoutSelector(false);
+          }
         }}
-        className="relative shadow-2xl bg-white border border-border/50 rounded-sm overflow-hidden group transition-all duration-300"
       >
-        {/* Hidden Canvas for Recording (DO NOT REMOVE) */}
-        <canvas
-          id="editor-canvas"
-          width={TOTAL_WIDTH}
-          height={TOTAL_HEIGHT}
-          className="absolute inset-0 w-full h-full pointer-events-none opacity-0"
-        />
-
-        {/* Grid Overlay */}
-        {currentPage?.gridMode && currentPage?.gridLayout && (
-          <GridOverlay
-            layout={currentPage.gridLayout}
-            canvasWidth={TOTAL_WIDTH}
-            canvasHeight={TOTAL_HEIGHT}
-            hoveredCell={hoveredCell}
-            onCellHover={setHoveredCell}
-            onLayoutChange={(newLayout) => {
-              if (currentPageId) setPageGridLayout(currentPageId, newLayout);
-            }}
-          />
-        )}
-
-        {/* Hidden Audio Playback - render all audio so they preload; each plays only when in range */}
+        {/* Canvas Container */}
         <div
-          style={{
-            position: "absolute",
-            opacity: 0,
-            pointerEvents: "none",
-            width: 0,
-            height: 0,
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onMouseDown={(e) => {
+            setSelectedElement(null);
+            setShowLayoutSelector(false);
           }}
-          aria-hidden="true"
+          style={{
+            width: `${TOTAL_WIDTH}px`,
+            height: `${TOTAL_HEIGHT}px`,
+            transform: `scale(${zoom / 100})`,
+            transformOrigin: "center center",
+            flexShrink: 0,
+            margin: "200px", // Give space for zoom/toolbar
+          }}
+          className="relative shadow-2xl bg-white border border-border/50 rounded-sm overflow-hidden group transition-all duration-300"
         >
-          {allAudioElements.map((element) => (
-            <AudioPlayer
-              key={element.id}
-              element={element}
-              isPlaying={isPlaying}
+          {/* Hidden Canvas for Recording (DO NOT REMOVE) */}
+          <canvas
+            id="editor-canvas"
+            width={TOTAL_WIDTH}
+            height={TOTAL_HEIGHT}
+            className="absolute inset-0 w-full h-full pointer-events-none opacity-0"
+          />
+
+          {/* Grid Overlay */}
+          {currentPage?.gridMode && currentPage?.gridLayout && (
+            <GridOverlay
+              layout={currentPage.gridLayout}
+              canvasWidth={TOTAL_WIDTH}
+              canvasHeight={TOTAL_HEIGHT}
+              hoveredCell={hoveredCell}
+              onCellHover={setHoveredCell}
+              onLayoutChange={(newLayout) => {
+                if (currentPageId) setPageGridLayout(currentPageId, newLayout);
+              }}
             />
-          ))}
-        </div>
-        {elements.length === 0 ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-4">
-            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border border-white/10 shadow-inner">
-              <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-text-main uppercase tracking-widest">
-                Masterpiece Awaits
-              </p>
-              <p className="text-[11px] font-medium text-text-muted mt-1">
-                Drag and drop assets to start editing
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="w-full h-full relative">
-            {sortedElements.map((element) => (
-              <CanvasElement
+          )}
+
+          {/* Hidden Audio Playback - render all audio so they preload; each plays only when in range */}
+          <div
+            style={{
+              position: "absolute",
+              opacity: 0,
+              pointerEvents: "none",
+              width: 0,
+              height: 0,
+            }}
+            aria-hidden="true"
+          >
+            {allAudioElements.map((element) => (
+              <AudioPlayer
                 key={element.id}
                 element={element}
-                isSelected={element.id === selectedElementId}
-                isDragging={dragState?.id === element.id}
-                handleMouseDown={handleMouseDown}
-                setEditingElementId={setEditingElementId}
-                editingElementId={editingElementId}
-                timelinePosition={timelinePosition}
                 isPlaying={isPlaying}
-                updateElement={updateElement}
-                currentPageId={currentPageId}
-                isObscuring={obscuringIds.has(element.id)}
               />
             ))}
           </div>
-        )}
+          {elements.length === 0 ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-4">
+              <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border border-white/10 shadow-inner">
+                <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-text-main uppercase tracking-widest">
+                  Masterpiece Awaits
+                </p>
+                <p className="text-[11px] font-medium text-text-muted mt-1">
+                  Drag and drop assets to start editing
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full h-full relative">
+              {sortedElements.map((element) => (
+                <CanvasElement
+                  key={element.id}
+                  element={element}
+                  isSelected={element.id === selectedElementId}
+                  isDragging={dragState?.id === element.id}
+                  handleMouseDown={handleMouseDown}
+                  setEditingElementId={setEditingElementId}
+                  editingElementId={editingElementId}
+                  timelinePosition={timelinePosition}
+                  isPlaying={isPlaying}
+                  updateElement={updateElement}
+                  currentPageId={currentPageId}
+                  isObscuring={obscuringIds.has(element.id)}
+                  zoom={zoom}
+                  hasMoved={
+                    dragState?.id === element.id ? dragState.hasMoved : false
+                  }
+                />
+              ))}
+            </div>
+          )}
 
-        {/* Focus lines */}
-        <div className="absolute inset-0 pointer-events-none border border-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 pointer-events-none border border-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
       </div>
-
-      {/* Canvas Controls removed - relocated to Timeline header */}
     </div>
   );
 }

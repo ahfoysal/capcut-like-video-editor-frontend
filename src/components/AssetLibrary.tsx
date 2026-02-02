@@ -39,7 +39,8 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
   } = useEditorStore();
 
   const [loading, setLoading] = useState(true);
-  const [uploadStatusMessage, setUploadStatusMessage] = useState<string>("Syncing assets...");
+  const [uploadStatusMessage, setUploadStatusMessage] =
+    useState<string>("Syncing assets...");
   const [isDragging, setIsDragging] = useState(false);
   const [stockSearch, setStockSearch] = useState("");
   const [stockResults, setStockResults] = useState<any[]>([]);
@@ -227,13 +228,10 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
     try {
       setLoading(true);
       const hasVideoOrAudio = files.some(
-        (f) =>
-          f.type.startsWith("video/") || f.type.startsWith("audio/"),
+        (f) => f.type.startsWith("video/") || f.type.startsWith("audio/"),
       );
       setUploadStatusMessage(
-        hasVideoOrAudio
-          ? "Transcoding for smooth playback..."
-          : "Uploading...",
+        hasVideoOrAudio ? "Transcoding for smooth playback..." : "Uploading...",
       );
       const uploadPromises = files.map((file) => uploadAsset(file));
       await Promise.all(uploadPromises);
@@ -359,10 +357,10 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                   key={el.id}
                   onClick={() => setSelectedElement(el.id)}
                   className={cn(
-                    "flex items-center justify-between p-3 bg-secondary/10 border rounded-xl group transition-all cursor-pointer",
+                    "flex items-center justify-between p-3 bg-white/[0.02] border rounded-xl group transition-all duration-300 cursor-pointer",
                     selectedElementId === el.id
-                      ? "border-accent ring-1 ring-accent"
-                      : "border-border hover:border-white/20",
+                      ? "border-[#5956E8] bg-[#5956E8]/5 shadow-[0_0_15px_rgba(89,86,232,0.1)]"
+                      : "border-white/5 hover:border-white/20 hover:bg-white/[0.04]",
                   )}
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
@@ -440,7 +438,7 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
             </span>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             {(Array.isArray(items) ? items : []).map((item: any) => (
               <div
                 key={item.id}
@@ -462,36 +460,36 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                 }}
                 className="group cursor-pointer animate-in fade-in zoom-in duration-300"
               >
-                <div className="relative rounded-xl overflow-hidden border border-border bg-secondary/10 aspect-square flex items-center justify-center shadow-sm group-hover:shadow-md group-hover:border-white/20 transition-all">
+                <div className="relative rounded-2xl overflow-hidden border border-white/5 bg-white/[0.02] aspect-square flex items-center justify-center shadow-lg group-hover:border-[#5956E8]/50 transition-all duration-500">
                   {item.icon ? (
                     <div
                       style={{ color: item.color }}
-                      className="drop-shadow-sm"
+                      className="drop-shadow-[0_0_8px_rgba(255,255,255,0.1)] group-hover:scale-110 transition-transform duration-500"
                     >
-                      <item.icon size={28} strokeWidth={2.5} />
+                      <item.icon size={32} strokeWidth={2} />
                     </div>
                   ) : item.type === "text" ? (
-                    <div className="flex flex-col items-center px-2 text-center">
-                      <span className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate w-full">
+                    <div className="flex flex-col items-center px-4 text-center">
+                      <span className="text-[12px] font-black text-white leading-tight mb-2 truncate w-full uppercase tracking-tighter opacity-80 group-hover:opacity-100 transition-opacity">
                         {item.content}
                       </span>
-                      <div className="h-0.5 w-4 bg-accent/40 rounded-full" />
+                      <div className="h-0.5 w-6 bg-[#5956E8]/60 rounded-full group-hover:w-full transition-all duration-500" />
                     </div>
                   ) : item.type === "audio" ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-cyan-500/5">
-                      <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center mb-2 border border-cyan-500/20 shadow-[0_0_15px_rgba(34,211,238,0.1)]">
-                        <Music size={24} className="text-cyan-400" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-[#5956E8]/5 group-hover:bg-[#5956E8]/10 transition-colors">
+                      <div className="w-14 h-14 rounded-full bg-[#5956E8]/10 flex items-center justify-center mb-2 border border-[#5956E8]/20 shadow-[0_0_20px_rgba(89,86,232,0.1)] group-hover:scale-110 transition-transform duration-500">
+                        <Music size={28} className="text-[#5956E8]" />
                       </div>
-                      <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">
+                      <span className="text-[9px] font-black text-[#5956E8] uppercase tracking-[0.2em]">
                         AUDIO
                       </span>
                     </div>
                   ) : (
-                    <div className="w-full h-full relative">
+                    <div className="w-full h-full relative overflow-hidden">
                       <img
                         src={getAssetUrl(item)}
                         alt={item.name}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.style.display = "none";
@@ -500,34 +498,45 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
                           if (fallback) fallback.style.display = "flex";
                         }}
                       />
-                      <div className="absolute inset-0 hidden flex-col items-center justify-center bg-secondary/20 text-text-muted/40">
+                      <div className="absolute inset-0 hidden flex-col items-center justify-center bg-black/40 text-white/40">
                         {item.type === "video" ? (
                           <Video size={24} />
                         ) : (
                           <ImageIcon size={24} />
                         )}
-                        <span className="text-[8px] mt-1 font-bold uppercase">
-                          No Preview
+                        <span className="text-[8px] mt-2 font-black uppercase tracking-widest">
+                          Offline
                         </span>
                       </div>
-                      {item.type === "video" && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
-                          <Video
-                            size={14}
-                            className="text-white/50 drop-shadow-md"
-                          />
-                        </div>
-                      )}
+
+                      {/* Media Badge */}
+                      <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded shadow-lg backdrop-blur-md bg-black/40 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        {item.type === "video" ? (
+                          <Video size={10} className="text-white" />
+                        ) : (
+                          <ImageIcon size={10} className="text-white" />
+                        )}
+                      </div>
                     </div>
                   )}
-                  {item.type === "video" && (
-                    <div className="absolute top-1 right-1 bg-black/70 text-white text-[8px] px-1.5 py-0.5 rounded-sm font-bold backdrop-blur-md border border-white/10 uppercase tracking-tighter">
-                      VIDEO
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors" />
+
+                  {/* Hover Overlay Actions */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-[2px]">
+                    {activeTab === "upload" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteResource(item.id);
+                        }}
+                        className="w-10 h-10 rounded-full bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 flex items-center justify-center transition-all scale-90 group-hover:scale-100"
+                        title="Delete Asset"
+                      >
+                        <Trash2 size={18} className="text-red-400" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <p className="mt-1.5 text-[10px] font-medium text-text-muted truncate px-1 group-hover:text-text-main transition-colors">
+                <p className="mt-2 text-[10px] font-bold text-zinc-500 truncate px-1 group-hover:text-[#5956E8] transition-all duration-300 uppercase tracking-tighter">
                   {item.name}
                 </p>
               </div>
@@ -558,32 +567,32 @@ export function AssetLibrary({ activeTab = "upload" }: AssetLibraryProps) {
           </p>
         </div>
       )}
-      <div className="p-4 border-b border-border space-y-4 shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
+      <div className="p-6 border-b border-white/5 space-y-5 bg-[#111114]/50">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-text-main tracking-tight uppercase">
-            {activeTab}
-          </h2>
+          <div className="flex flex-col">
+            <h2 className="text-sm font-black text-white tracking-[0.2em] uppercase">
+              {activeTab}
+            </h2>
+            <div className="h-1 w-6 bg-[#5956E8] rounded-full mt-1" />
+          </div>
           {activeTab === "upload" && (
-            <label className="cursor-pointer p-2 hover:bg-white/5 text-text-main rounded-xl transition-all active:scale-90 group relative">
-              <Upload size={18} />
+            <label className="cursor-pointer p-2 hover:bg-white/5 text-zinc-400 hover:text-white rounded-lg transition-all active:scale-90 group relative border border-white/5 bg-white/[0.02]">
+              <Upload size={16} />
               <input type="file" className="hidden" onChange={handleUpload} />
-              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                Upload
-              </span>
             </label>
           )}
         </div>
 
         <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-text-main transition-colors" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 group-focus-within:text-[#5956E8] transition-colors" />
           <input
             type="text"
             value={activeTab === "media" ? stockSearch : ""}
             onChange={(e) =>
               activeTab === "media" ? setStockSearch(e.target.value) : null
             }
-            placeholder={`Search ${activeTab === "media" ? "stock photos" : activeTab}...`}
-            className="w-full pl-9 pr-3 py-2 bg-secondary/20 border border-border rounded-xl text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:bg-secondary/30 focus:border-white/10 focus:ring-4 focus:ring-white/5 transition-all font-medium"
+            placeholder={`Search ${activeTab === "media" ? "library" : activeTab}...`}
+            className="w-full pl-9 pr-3 py-2 bg-zinc-900/50 border border-white/5 rounded-xl text-[12px] text-white placeholder:text-zinc-600 focus:outline-none focus:bg-zinc-900 focus:border-[#5956E8]/30 transition-all font-medium"
           />
         </div>
       </div>

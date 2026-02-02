@@ -12,8 +12,9 @@ import {
   Copy,
   Maximize,
   Minimize,
-  PanelBottomClose,
   PanelBottomOpen,
+  PanelBottom,
+  StretchVertical,
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 import { resumeAudioContextOnGesture } from "@/lib/audioContext";
@@ -43,12 +44,64 @@ export function Timeline({ className }: { className?: string }) {
     reorderPages,
     isFullscreen,
     toggleFullscreen,
-    isTimelineCollapsed,
-    toggleTimelineCollapsed,
+    timelineHeightMode,
+    setTimelineHeightMode,
+    setTimelineHeight,
+    isTimelineResizing,
+    setIsTimelineResizing,
   } = useEditorStore();
 
   const [editingPageId, setEditingPageId] = React.useState<string | null>(null);
   const [editingPageValue, setEditingPageValue] = React.useState("");
+
+  const startResizing = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsTimelineResizing(true);
+      document.body.style.cursor = "ns-resize";
+    },
+    [setIsTimelineResizing],
+  );
+
+  const stopResizing = React.useCallback(() => {
+    setIsTimelineResizing(false);
+    document.body.style.cursor = "";
+  }, [setIsTimelineResizing]);
+
+  const resize = React.useCallback(
+    (e: MouseEvent) => {
+      if (isTimelineResizing) {
+        const newHeight = window.innerHeight - e.clientY;
+        // Limit height between 56 and 800
+        if (newHeight >= 56 && newHeight < 800) {
+          setTimelineHeight(newHeight);
+          if (timelineHeightMode !== "default") {
+            setTimelineHeightMode("default");
+          }
+        }
+      }
+    },
+    [
+      isTimelineResizing,
+      setTimelineHeight,
+      timelineHeightMode,
+      setTimelineHeightMode,
+    ],
+  );
+
+  React.useEffect(() => {
+    if (isTimelineResizing) {
+      window.addEventListener("mousemove", resize);
+      window.addEventListener("mouseup", stopResizing);
+    } else {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    }
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [isTimelineResizing, resize, stopResizing]);
 
   const handleRenameSubmit = (pageId: string) => {
     if (editingPageValue.trim()) {
@@ -209,7 +262,11 @@ export function Timeline({ className }: { className?: string }) {
 
   const [isScrubbing, setIsScrubbing] = React.useState(false);
 
-  const onRulerMouseDown = (e: React.MouseEvent) => {
+  const onTracksMouseDown = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return;
+    setSelectedElement(null);
+  };
+  const onRulerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsScrubbing(true);
     handleScrub(e);
   };
@@ -314,7 +371,7 @@ export function Timeline({ className }: { className?: string }) {
         console.error("Timeline drop failed:", err);
       }
     },
-    [currentPageId, addElement, PX_PER_SEC],
+    [currentPageId, addElement, PX_PER_SEC, currentPage?.elements],
   );
 
   // Auto-scroll to playhead during playback
@@ -327,10 +384,10 @@ export function Timeline({ className }: { className?: string }) {
 
       if (playheadX > currentScroll + viewWidth - 100) {
         const targetScroll = playheadX - viewWidth + 200;
-        scrollEl.scrollLeft = targetScroll;
+        scrollEl.scrollTo({ left: targetScroll, behavior: "auto" });
       } else if (playheadX < currentScroll) {
         const targetScroll = Math.max(0, playheadX - 100);
-        scrollEl.scrollLeft = targetScroll;
+        scrollEl.scrollTo({ left: targetScroll, behavior: "auto" });
       }
     }
   }, [isPlaying, timelinePosition, PX_PER_SEC]);
@@ -398,9 +455,15 @@ export function Timeline({ className }: { className?: string }) {
             const rect = scrollEl.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             if (mouseX > scrollEl.clientWidth - 50) {
-              scrollEl.scrollLeft += 10;
+              scrollEl.scrollTo({
+                left: scrollEl.scrollLeft + 10,
+                behavior: "auto",
+              });
             } else if (mouseX < HEADER_WIDTH + 50) {
-              scrollEl.scrollLeft -= 10;
+              scrollEl.scrollTo({
+                left: scrollEl.scrollLeft - 10,
+                behavior: "auto",
+              });
             }
           }
         } else if (timelineDrag.type === "trim-left") {
@@ -518,27 +581,38 @@ export function Timeline({ className }: { className?: string }) {
   return (
     <div
       ref={containerRef}
-      className={cn("bg-bg-panel flex flex-col h-full select-none", className)}
+      className={cn(
+        "bg-bg-panel flex flex-col h-full select-none relative",
+        className,
+      )}
     >
+      {/* Resize Handle */}
+      <div
+        onMouseDown={startResizing}
+        className="absolute -top-1.5 left-0 right-0 h-3 cursor-ns-resize z-60 flex items-center justify-center group"
+      >
+        <div className="w-12 h-0.5 bg-white/10 group-hover:bg-[#5956E8] rounded-full transition-all group-hover:shadow-[0_0_10px_rgba(89,86,232,0.5)]" />
+      </div>
+
       {/* Timeline Controls */}
-      <div className="h-14 border-y border-border flex items-center px-4 justify-between bg-bg-app/50 relative z-50">
-        <div className="flex items-center gap-6">
-          <div className="text-[13px] font-mono font-bold text-accent tabular-nums tracking-wider bg-black/40 px-3 py-1 rounded-md border border-white/5">
+      <div className="h-14 border-y border-white/5 flex items-center px-6 justify-between bg-bg-panel relative z-50">
+        <div className="flex items-center gap-8">
+          <div className="text-[14px] font-black text-[#5956E8] tabular-nums tracking-widest bg-[#5956E8]/10 px-4 py-1.5 rounded-lg border border-[#5956E8]/20 shadow-[0_0_15px_rgba(89,86,232,0.1)]">
             {formatTime(timelinePosition)}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => seekTo(0)}
               title="Skip to Beginning"
-              className="p-2 hover:bg-white/5 rounded-full transition-colors text-text-muted hover:text-text-main"
+              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
             >
-              <SkipBack size={18} />
+              <SkipBack size={16} />
             </button>
             <button
               onClick={() => seekTo(timelinePosition - 1)}
               title="Jump Back (1s)"
-              className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-text-muted/50 hover:text-text-main"
+              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
             >
               <Minus size={14} />
             </button>
@@ -550,7 +624,7 @@ export function Timeline({ className }: { className?: string }) {
                 }
                 togglePlay();
               }}
-              className="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:bg-gray-200 transition-all active:scale-95 shadow-lg"
+              className="w-10 h-10 bg-[#5956E8] text-white rounded-full flex items-center justify-center hover:bg-[#6a67ff] transition-all active:scale-90 shadow-[0_0_20px_rgba(89,86,232,0.4)]"
             >
               {isPlaying ? (
                 <Pause size={18} fill="currentColor" />
@@ -561,50 +635,53 @@ export function Timeline({ className }: { className?: string }) {
             <button
               onClick={() => seekTo(timelinePosition + 1)}
               title="Jump Forward (1s)"
-              className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-text-muted/50 hover:text-text-main"
+              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
             >
               <Plus size={14} />
             </button>
             <button
               onClick={() => seekTo(projectDuration)}
               title="Skip to End"
-              className="p-2 hover:bg-white/5 rounded-full transition-colors text-text-muted hover:text-text-main"
+              className="p-2 hover:bg-white/5 rounded-lg transition-all text-zinc-500 hover:text-white"
             >
-              <SkipForward size={18} />
+              <SkipForward size={16} />
             </button>
           </div>
         </div>
 
         {/* Relocated Info Bar */}
-        <div className="flex items-center gap-6 text-[10px] font-bold">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-md border border-white/5">
-            <span className="text-accent uppercase tracking-tighter opacity-70">
-              Size
-            </span>
-            <span className="text-text-main tabular-nums">
-              {(() => {
-                const l = currentPage?.layout || "16:9";
-                if (l === "1:1") return "1080X1080";
-                if (l === "16:9") return "1920X1080";
-                if (l === "9:16") return "1080X1920";
-                if (l === "4:5") return "1080X1350";
-                if (l === "2:3") return "1080X1620";
-                return "1920X1080";
-              })()}
-            </span>
-            <span className="text-white/10 mx-1">|</span>
-            <span className="text-text-muted capitalize">
-              {currentPage?.layout || "16:9"}
-            </span>
+        <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-[0.2em]">
+          <div className="flex items-center gap-4 px-4 py-2 bg-white/[0.02] rounded-lg border border-white/5">
+            <div className="flex flex-col">
+              <span className="text-zinc-600 text-[8px]">RESOLUTION</span>
+              <span className="text-white">
+                {(() => {
+                  const l = currentPage?.layout || "16:9";
+                  if (l === "1:1") return "1080X1080";
+                  if (l === "16:9") return "1920X1080";
+                  if (l === "9:16") return "1080X1920";
+                  if (l === "4:5") return "1080X1350";
+                  if (l === "2:3") return "1080X1620";
+                  return "1920X1080";
+                })()}
+              </span>
+            </div>
+            <div className="w-px h-6 bg-white/5" />
+            <div className="flex flex-col">
+              <span className="text-zinc-600 text-[8px]">ASPECT RATIO</span>
+              <span className="text-accent">
+                {currentPage?.layout || "16:9"}
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-md border border-white/5">
-            <span className="text-accent uppercase tracking-tighter opacity-70">
-              Time
-            </span>
-            <div className="flex items-center gap-1 text-text-main tabular-nums">
-              <span>{formatTime(timelinePosition)}</span>
-              <span className="text-text-muted/30">/</span>
+          <div className="flex flex-col px-4 py-2 bg-white/2 rounded-lg border border-white/5 min-w-35">
+            <span className="text-zinc-600 text-[8px]">PROJECT PROGRESS</span>
+            <div className="flex items-center gap-1.5 text-white tabular-nums">
+              <span className="text-accent">
+                {formatTime(timelinePosition)}
+              </span>
+              <span className="text-white/10">|</span>
               <span className="text-text-muted">
                 {formatTime(projectDuration)}
               </span>
@@ -614,22 +691,26 @@ export function Timeline({ className }: { className?: string }) {
 
         <div className="flex items-center gap-4 border-l border-border pl-4">
           {/* Zoom Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => setTimelineZoom(timelineZoom - 10)}
-              className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
+              onClick={() => setTimelineZoom(Math.max(10, timelineZoom - 10))}
+              className="p-2 hover:bg-white/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <ZoomOut size={16} />
             </button>
-            <div className="w-32 h-1 bg-white/5 rounded-full relative overflow-hidden">
+            <div className="w-32 h-1 bg-zinc-800 rounded-full relative overflow-visible">
               <div
-                className="absolute left-0 top-0 h-full bg-accent rounded-full shadow-[0_0_8px_rgba(34,211,238,0.5)] transition-all duration-300"
+                className="absolute left-0 top-0 h-full bg-accent rounded-full shadow-[0_0_10px_rgba(89,86,232,0.5)] transition-all duration-300"
                 style={{ width: `${(timelineZoom / 200) * 100}%` }}
+              />
+              <div
+                className="absolute w-3 h-3 bg-white rounded-full top-1/2 -translate-y-1/2 shadow-lg border-2 border-accent transition-all"
+                style={{ left: `calc(${(timelineZoom / 200) * 100}% - 6px)` }}
               />
             </div>
             <button
-              onClick={() => setTimelineZoom(timelineZoom + 10)}
-              className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
+              onClick={() => setTimelineZoom(Math.min(200, timelineZoom + 10))}
+              className="p-2 hover:bg-white/5 rounded-lg transition-all text-text-muted hover:text-text-main"
             >
               <ZoomIn size={16} />
             </button>
@@ -637,26 +718,41 @@ export function Timeline({ className }: { className?: string }) {
 
           <div className="h-4 w-px bg-white/10 mx-2" />
 
-          {/* Toggle Controls */}
+          {/* Height Mode Selector */}
+          <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
+            {[
+              { id: "small", icon: PanelBottomOpen, label: "Small" },
+              { id: "default", icon: PanelBottom, label: "Default" },
+              { id: "big", icon: StretchVertical, label: "Large" },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => {
+                  setTimelineHeightMode(mode.id as any);
+                  if (mode.id === "default") setTimelineHeight(256);
+                  if (mode.id === "big") setTimelineHeight(450);
+                }}
+                title={`${mode.label} Timeline`}
+                className={cn(
+                  "p-1.5 rounded-lg transition-all",
+                  timelineHeightMode === mode.id
+                    ? "bg-[#5956E8] text-white shadow-[0_0_10px_rgba(89,86,232,0.3)]"
+                    : "text-text-muted hover:text-text-main hover:bg-white/5",
+                )}
+              >
+                <mode.icon size={14} />
+              </button>
+            ))}
+          </div>
+
+          <div className="h-4 w-px bg-white/10 mx-2" />
+
           <button
             onClick={toggleFullscreen}
             title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-            className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
+            className="p-2 hover:bg-white/5 rounded-lg transition-all text-text-muted hover:text-text-main"
           >
             {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-          </button>
-          <button
-            onClick={toggleTimelineCollapsed}
-            title={
-              isTimelineCollapsed ? "Expand Timeline" : "Collapse Timeline"
-            }
-            className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
-          >
-            {isTimelineCollapsed ? (
-              <PanelBottomOpen size={16} />
-            ) : (
-              <PanelBottomClose size={16} />
-            )}
           </button>
         </div>
       </div>
@@ -664,12 +760,16 @@ export function Timeline({ className }: { className?: string }) {
       {/* Timeline Tracks Area */}
       <div
         ref={tracksScrollRef}
-        className="flex-1 overflow-x-auto overflow-y-auto no-scrollbar relative z-10 transition-all bg-[#111114]"
+        className={cn(
+          "flex-1 overflow-x-auto overflow-y-auto no-scrollbar relative z-10 transition-all bg-bg-panel",
+          timelineHeightMode === "small" && "overflow-hidden",
+        )}
         onDragOver={(e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = "copy";
         }}
         onDrop={handleTimelineDrop}
+        onMouseDown={onTracksMouseDown}
       >
         <div
           className="flex flex-col relative"
@@ -677,7 +777,7 @@ export function Timeline({ className }: { className?: string }) {
         >
           {/* Timeline Ruler */}
           <div
-            className="sticky top-0 h-8 border-b border-border bg-bg-panel flex items-center z-30 cursor-crosshair"
+            className="sticky top-0 h-10 border-b border-white/5 bg-bg-panel flex items-center z-30 cursor-crosshair overflow-hidden"
             onMouseDown={onRulerMouseDown}
             style={{ marginLeft: HEADER_WIDTH }}
           >
@@ -688,10 +788,10 @@ export function Timeline({ className }: { className?: string }) {
               return (
                 <div
                   key={time}
-                  className="absolute border-l border-border/50 h-3 flex items-end pb-1 px-1 shrink-0"
+                  className="absolute h-full border-l border-white/10 flex items-end pb-2 px-1.5 shrink-0"
                   style={{ left: time * PX_PER_SEC }}
                 >
-                  <span className="text-[9px] font-bold text-text-muted/60 font-mono whitespace-nowrap">
+                  <span className="text-[10px] font-black text-zinc-600 font-mono whitespace-nowrap tracking-tighter">
                     {scaleConfig.label(time)}
                   </span>
                 </div>
@@ -707,7 +807,7 @@ export function Timeline({ className }: { className?: string }) {
                 return (
                   <div
                     key={`minor-${time}`}
-                    className="absolute border-l border-border/20 h-1.5"
+                    className="absolute border-l border-white/5 h-2 bottom-0"
                     style={{ left: time * PX_PER_SEC }}
                   />
                 );
@@ -742,13 +842,13 @@ export function Timeline({ className }: { className?: string }) {
             return (
               <div
                 key={track.label}
-                className="grid grid-cols-[120px_1fr] border-b border-border/10 group overflow-hidden"
+                className="grid grid-cols-[120px_1fr] border-b border-white/3 group overflow-hidden"
                 style={{ minHeight: totalHeight }}
               >
-                <div className="sticky left-0 bg-bg-panel z-20 px-4 flex items-center border-r border-border/20 text-[10px] font-bold text-text-muted uppercase tracking-wider group-hover:text-text-main transition-colors">
+                <div className="sticky left-0 bg-bg-panel z-20 px-6 flex items-center border-r border-white/5 text-[9px] font-black text-text-muted uppercase tracking-[0.2em] group-hover:text-accent transition-all duration-300">
                   {track.label}
                 </div>
-                <div className="relative h-full py-1.5 bg-black/5">
+                <div className="relative h-full py-2 bg-black/20">
                   {/* Vertical grid lines */}
                   {Array.from({
                     length: Math.ceil(totalDuration / scaleConfig.major) + 1,
@@ -769,16 +869,16 @@ export function Timeline({ className }: { className?: string }) {
                             onSegmentMouseDown(e, element, "move")
                           }
                           className={cn(
-                            "absolute h-9 rounded-md border flex items-center px-3 cursor-move transition-shadow z-10",
+                            "absolute h-9 rounded-lg border flex items-center px-3 cursor-move transition-all duration-300 z-10 overflow-hidden group/segment",
                             track.color,
                             selectedElementId === element.id
-                              ? "ring-2 ring-white border-transparent z-20 shadow-2xl scale-[1.01]"
-                              : "border-white/10 hover:border-white/30",
+                              ? "border-[#5956E8] bg-[#5956E8]/20 z-20 shadow-[0_0_20px_rgba(89,86,232,0.2)]"
+                              : "border-white/5 hover:border-white/20 bg-white/5 hover:bg-white/[0.08]",
                           )}
                           style={{
                             left: element.startTime * PX_PER_SEC,
                             width: element.duration * PX_PER_SEC,
-                            top: rowIndex * rowHeight + 6,
+                            top: rowIndex * rowHeight + 10,
                           }}
                         >
                           <span
@@ -792,13 +892,13 @@ export function Timeline({ className }: { className?: string }) {
                           {selectedElementId === element.id && (
                             <>
                               <div
-                                className="absolute left-0 top-0 bottom-0 w-2 hover:bg-white/50 bg-white/30 rounded-l-md cursor-ew-resize transition-colors"
+                                className="absolute left-0 top-0 bottom-0 w-1.5 hover:bg-[#5956E8] bg-[#5956E8]/40 cursor-ew-resize transition-all"
                                 onMouseDown={(e) =>
                                   onSegmentMouseDown(e, element, "trim-left")
                                 }
                               />
                               <div
-                                className="absolute right-0 top-0 bottom-0 w-2 hover:bg-white/50 bg-white/30 rounded-r-md cursor-ew-resize transition-colors"
+                                className="absolute right-0 top-0 bottom-0 w-1.5 hover:bg-[#5956E8] bg-[#5956E8]/40 cursor-ew-resize transition-all"
                                 onMouseDown={(e) =>
                                   onSegmentMouseDown(e, element, "trim-right")
                                 }
@@ -816,13 +916,15 @@ export function Timeline({ className }: { className?: string }) {
 
           {/* Playhead Layer */}
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none transition-none shadow-[0_0_8px_rgba(255,255,255,0.5)]"
+            className="absolute top-0 bottom-0 w-[2px] bg-[#5956E8] z-40 pointer-events-none transition-none shadow-[0_0_15px_rgba(89,86,232,0.8)]"
             style={{
               left: HEADER_WIDTH + timelinePosition * PX_PER_SEC,
               height: "100%",
             }}
           >
-            <div className="w-3 h-3 bg-white rounded-xs rotate-45 -translate-x-1/2 -mt-1.5 shadow-lg border border-black/20" />
+            <div className="w-4 h-4 bg-[#5956E8] rounded-full -translate-x-1/2 -mt-2 shadow-[0_0_10px_rgba(89,86,232,0.5)] border-2 border-white flex items-center justify-center">
+              <div className="w-1 h-1 bg-white rounded-full" />
+            </div>
           </div>
         </div>
       </div>

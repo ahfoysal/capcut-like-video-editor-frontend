@@ -1,23 +1,24 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #0ea5e9;
-  --color-secondary: #3f3f46;
-  --color-accent: #22d3ee;
-  --color-bg-panel: #1e1e22;
-  --color-bg-app: #18181c;
-  --color-border: #2c2c2e;
-  --color-text-main: #ffffff;
-  --color-text-muted: #a0a0a5;
+  --color-primary: #5956e8;
+  --color-secondary: #27272a;
+  --color-accent: #5956e8;
+  --color-bg-panel: #111114;
+  --color-bg-app: #09090b;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-text-main: #f4f4f5;
+  --color-text-muted: #a1a1aa;
 
   --font-inter: "Inter", sans-serif;
 }
 
 :root {
-  --background: #18181c;
-  --foreground: #ffffff;
-  --border: #2c2c2e;
-  --panel: #1e1e22;
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --border: rgba(255, 255, 255, 0.08);
+  --panel: #111114;
+  --accent: #5956e8;
 }
 
 body {
@@ -37,38 +38,9 @@ body {
 }
 
 /* Custom scrollbar */
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #111827;
-    --foreground: #ededed;
-  }
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
-}
-
-/* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -76,43 +48,44 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: rgba(255, 255, 255, 0.2);
 }
 
-/* Range slider styling */
+/* Range slider styling - Premium Dark */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 6px;
-  border-radius: 3px;
-  background: #e5e7eb;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
   outline: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #06b6d4;
+  background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 10px rgba(89, 86, 232, 0.5);
+  border: 2px solid white;
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #06b6d4;
+  background: var(--accent);
   cursor: pointer;
-  border: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 2px solid white;
+  box-shadow: 0 0 10px rgba(89, 86, 232, 0.5);
 }
 
 /* Toggle switch animation */

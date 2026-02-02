@@ -194,6 +194,8 @@ export interface EditorState {
   saveStatus: "idle" | "saving" | "saved" | "error" | "loading";
   history: Page[][];
   future: Page[][];
+  showLeftSidebar: boolean;
+  showRightSidebar: boolean;
 }
 
 export interface EditorActions {
@@ -258,6 +260,8 @@ export interface EditorActions {
   setSaveStatus: (status: EditorState["saveStatus"]) => void;
   saveProject: () => Promise<void>;
   uploadAsset: (file: File) => Promise<any>;
+  toggleLeftSidebar: () => void;
+  toggleRightSidebar: () => void;
 }
 
 export type EditorStore = EditorState & EditorActions;

@@ -37,7 +37,7 @@ export function Sidebar({ activeTab = "upload", onTabChange }: SidebarProps) {
   ];
 
   return (
-    <div className="w-18 h-full bg-bg-panel border-r border-border flex flex-col items-center py-4 gap-4 z-10 shadow-xl">
+    <div className="w-[72px] h-full bg-[#111114] border-r border-white/5 flex flex-col items-center py-6 gap-2 z-10 shadow-2xl relative">
       {menuItems.map((item) => {
         const isActive = activeTab === item.id;
         return (
@@ -45,19 +45,39 @@ export function Sidebar({ activeTab = "upload", onTabChange }: SidebarProps) {
             key={item.id}
             onClick={() => onTabChange?.(item.id)}
             className={cn(
-              "flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all gap-1 group",
+              "flex flex-col items-center justify-center w-[60px] h-[60px] rounded-xl transition-all duration-300 relative group",
               isActive
-                ? "bg-white text-black"
-                : "text-text-muted hover:bg-white/5 hover:text-text-main",
+                ? "text-white"
+                : "text-zinc-500 hover:text-zinc-200 hover:bg-white/5",
             )}
           >
-            <item.icon
+            {/* Active Indicator Bar */}
+            {isActive && (
+              <div className="absolute left-0 w-[3px] h-6 bg-[#5956E8] rounded-r-full shadow-[0_0_10px_rgba(89,86,232,0.8)]" />
+            )}
+
+            <div
               className={cn(
-                "w-5 h-5 transition-transform group-active:scale-90",
-                isActive && "stroke-[2.5px]",
+                "p-2 rounded-xl transition-all duration-300",
+                isActive &&
+                  "bg-[#5956E8]/10 shadow-[inner_0_0_10px_rgba(89,86,232,0.1)]",
               )}
-            />
-            <span className="text-[10px] font-bold tracking-tight">
+            >
+              <item.icon
+                className={cn(
+                  "w-[22px] h-[22px] transition-transform group-hover:scale-110 group-active:scale-95",
+                  isActive ? "stroke-[2.2px]" : "stroke-[1.8px]",
+                )}
+              />
+            </div>
+            <span
+              className={cn(
+                "text-[9px] font-black uppercase tracking-widest mt-1 transition-colors duration-300",
+                isActive
+                  ? "text-[#5956E8]"
+                  : "text-zinc-600 group-hover:text-zinc-400",
+              )}
+            >
               {item.label}
             </span>
           </button>

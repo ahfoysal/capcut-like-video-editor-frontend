@@ -15,8 +15,12 @@ interface EditorState extends EditorStore {
   copyElement: (elementId: string) => void;
   pasteElement: () => void;
   reorderPages: (startIndex: number, endIndex: number) => void;
-  isTimelineCollapsed: boolean;
-  toggleTimelineCollapsed: () => void;
+  timelineHeightMode: "default" | "small" | "big";
+  setTimelineHeightMode: (mode: "default" | "small" | "big") => void;
+  timelineHeight: number;
+  setTimelineHeight: (height: number) => void;
+  isTimelineResizing: boolean;
+  setIsTimelineResizing: (isResizing: boolean) => void;
   isFullscreen: boolean;
   toggleFullscreen: () => void;
 }
@@ -59,16 +63,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saveStatus: "idle",
   history: [],
   future: [],
-  history: [],
-  future: [],
   clipboard: null,
-  isTimelineCollapsed: false,
+  timelineHeightMode: "default",
+  timelineHeight: 256,
+  isTimelineResizing: false,
   isFullscreen: false,
+  showLeftSidebar: true,
+  showRightSidebar: true,
 
-  toggleTimelineCollapsed: () =>
-    set((state) => ({ isTimelineCollapsed: !state.isTimelineCollapsed })),
+  setTimelineHeightMode: (mode) => set({ timelineHeightMode: mode }),
+  setTimelineHeight: (height: number) => set({ timelineHeight: height }),
+  setIsTimelineResizing: (isResizing: boolean) =>
+    set({ isTimelineResizing: isResizing }),
   toggleFullscreen: () =>
     set((state) => ({ isFullscreen: !state.isFullscreen })), // Toggle fullscreen state
+  toggleLeftSidebar: () =>
+    set((state) => ({ showLeftSidebar: !state.showLeftSidebar })),
+  toggleRightSidebar: () =>
+    set((state) => ({ showRightSidebar: !state.showRightSidebar })),
 
   // Project actions
   pushHistory: () => {

@@ -131,13 +131,14 @@ export function GridOverlay({
 
   return (
     <div
+      data-grid-overlay
       className="absolute inset-0 pointer-events-none"
       style={{ width: canvasWidth, height: canvasHeight }}
     >
       {/* Grid lines & Resize Handles */}
 
       {/* Vertical Lines (Cols) */}
-      {colPositions.slice(0, -1).map((posPct, i) => {
+      {colPositions.slice(0, -1).map((posPct: number, i: number) => {
         const x = (posPct / 100) * canvasWidth;
         return (
           <React.Fragment key={`v-${i}`}>
@@ -157,7 +158,7 @@ export function GridOverlay({
       })}
 
       {/* Horizontal Lines (Rows) */}
-      {rowPositions.slice(0, -1).map((posPct, i) => {
+      {rowPositions.slice(0, -1).map((posPct: number, i: number) => {
         const y = (posPct / 100) * canvasHeight;
         return (
           <React.Fragment key={`h-${i}`}>
