@@ -25,26 +25,11 @@ import {
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 import { Element } from "@/types/editor";
-import { cn } from "@/lib/utils";
+import { cn, getLayoutDimensions } from "@/lib/utils";
 import { getCellBoundaries } from "@/lib/gridLayouts";
 import { MediaEditModal } from "./MediaEditModal";
 
-const getLayoutDimensions = (layout: string = "16:9") => {
-  switch (layout) {
-    case "1:1":
-      return { width: 1080, height: 1080 };
-    case "16:9":
-      return { width: 1920, height: 1080 };
-    case "9:16":
-      return { width: 1080, height: 1920 };
-    case "4:5":
-      return { width: 1080, height: 1350 };
-    case "2:3":
-      return { width: 1080, height: 1620 };
-    default:
-      return { width: 1920, height: 1080 };
-  }
-};
+// Local getLayoutDimensions removed in favor of util
 
 export function PropertiesPanel() {
   const {
@@ -119,6 +104,88 @@ export function PropertiesPanel() {
         </div>
 
         <div className="p-4 space-y-6">
+          {/* Canvas Layout Settings */}
+          <div className="space-y-3">
+            <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
+              Canvas Layout
+            </label>
+            <div className="space-y-3">
+              <select
+                className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs font-bold text-text-main focus:outline-none focus:bg-secondary/30 transition-all cursor-pointer"
+                value={currentPage?.layout || "16:9"}
+                onChange={(e) => {
+                  if (currentPageId) {
+                    updatePage(currentPageId, {
+                      layout: e.target.value as any,
+                      // Initialize custom size if needed when switching to custom
+                      customSize:
+                        e.target.value === "custom"
+                          ? currentPage?.customSize || {
+                              width: 1920,
+                              height: 1080,
+                            }
+                          : undefined,
+                    });
+                  }
+                }}
+              >
+                <option value="16:9">16:9 (Landscape)</option>
+                <option value="9:16">9:16 (Portrait)</option>
+                <option value="1:1">1:1 (Square)</option>
+                <option value="4:5">4:5 (Vertical)</option>
+                <option value="2:3">2:3 (Vertical)</option>
+                <option value="custom">Custom Size</option>
+              </select>
+
+              {currentPage?.layout === "custom" && (
+                <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-text-muted font-bold ml-1">
+                      WIDTH
+                    </span>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-mono font-bold text-text-main"
+                      value={currentPage.customSize?.width || 1920}
+                      onChange={(e) => {
+                        if (currentPageId) {
+                          const width = parseInt(e.target.value) || 100;
+                          updatePage(currentPageId, {
+                            customSize: {
+                              height: currentPage.customSize?.height || 1080,
+                              width,
+                            },
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-text-muted font-bold ml-1">
+                      HEIGHT
+                    </span>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 bg-secondary/20 border border-border rounded-xl text-xs focus:outline-none focus:bg-secondary/30 focus:border-white/10 transition-all font-mono font-bold text-text-main"
+                      value={currentPage.customSize?.height || 1080}
+                      onChange={(e) => {
+                        if (currentPageId) {
+                          const height = parseInt(e.target.value) || 100;
+                          updatePage(currentPageId, {
+                            customSize: {
+                              width: currentPage.customSize?.width || 1920,
+                              height,
+                            },
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Global Page Duration */}
           <div className="space-y-3">
             <label className="text-[10px] font-bold text-text-muted uppercase tracking-[0.15em]">
@@ -252,9 +319,7 @@ export function PropertiesPanel() {
               <button
                 onClick={() => {
                   let targetPos = { x: 0, y: 0 };
-                  let targetSize = getLayoutDimensions(
-                    currentPage?.layout || "16:9",
-                  );
+                  let targetSize = getLayoutDimensions(currentPage || "16:9");
 
                   if (
                     currentPage?.gridMode &&
@@ -298,9 +363,7 @@ export function PropertiesPanel() {
               <button
                 onClick={() => {
                   let targetPos = { x: 0, y: 0 };
-                  let targetSize = getLayoutDimensions(
-                    currentPage?.layout || "16:9",
-                  );
+                  let targetSize = getLayoutDimensions(currentPage || "16:9");
 
                   if (
                     currentPage?.gridMode &&
@@ -344,9 +407,7 @@ export function PropertiesPanel() {
               </button>
               <button
                 onClick={() => {
-                  const targetSize = getLayoutDimensions(
-                    currentPage?.layout || "16:9",
-                  );
+                  const targetSize = getLayoutDimensions(currentPage || "16:9");
                   let targetPos = { x: 0, y: 0 };
                   let targetSizeVal = {
                     width: targetSize.width,
@@ -820,7 +881,7 @@ export function PropertiesPanel() {
                   <button
                     onClick={() => {
                       const layoutDim = getLayoutDimensions(
-                        currentPage?.layout || "16:9",
+                        currentPage || "16:9",
                       );
                       handleUpdate({
                         marquee: true,
@@ -901,7 +962,7 @@ export function PropertiesPanel() {
                     <button
                       onClick={() => {
                         const layoutDim = getLayoutDimensions(
-                          currentPage?.layout || "16:9",
+                          currentPage || "16:9",
                         );
                         handleUpdate({
                           position: { ...selectedElement.position, x: 0 },

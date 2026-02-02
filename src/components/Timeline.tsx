@@ -10,6 +10,10 @@ import {
   ZoomIn,
   ZoomOut,
   Copy,
+  Maximize,
+  Minimize,
+  PanelBottomClose,
+  PanelBottomOpen,
 } from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 import { resumeAudioContextOnGesture } from "@/lib/audioContext";
@@ -37,6 +41,10 @@ export function Timeline({ className }: { className?: string }) {
     moveElementToPage,
     duplicatePage,
     reorderPages,
+    isFullscreen,
+    toggleFullscreen,
+    isTimelineCollapsed,
+    toggleTimelineCollapsed,
   } = useEditorStore();
 
   const [editingPageId, setEditingPageId] = React.useState<string | null>(null);
@@ -605,6 +613,7 @@ export function Timeline({ className }: { className?: string }) {
         </div>
 
         <div className="flex items-center gap-4 border-l border-border pl-4">
+          {/* Zoom Controls */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setTimelineZoom(timelineZoom - 10)}
@@ -625,6 +634,30 @@ export function Timeline({ className }: { className?: string }) {
               <ZoomIn size={16} />
             </button>
           </div>
+
+          <div className="h-4 w-px bg-white/10 mx-2" />
+
+          {/* Toggle Controls */}
+          <button
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
+          >
+            {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+          </button>
+          <button
+            onClick={toggleTimelineCollapsed}
+            title={
+              isTimelineCollapsed ? "Expand Timeline" : "Collapse Timeline"
+            }
+            className="p-1.5 hover:bg-white/10 rounded-md transition-all text-text-muted hover:text-text-main"
+          >
+            {isTimelineCollapsed ? (
+              <PanelBottomOpen size={16} />
+            ) : (
+              <PanelBottomClose size={16} />
+            )}
+          </button>
         </div>
       </div>
 

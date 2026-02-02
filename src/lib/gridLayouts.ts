@@ -14,8 +14,8 @@ export type GridLayoutType =
 
 export interface GridCell {
   id: string;
-  row: number;
-  col: number;
+  row: number; // Starting row index
+  col: number; // Starting col index
   rowSpan: number;
   colSpan: number;
   occupied: boolean;
@@ -28,6 +28,10 @@ export interface GridLayout {
   type: GridLayoutType;
   rows: number;
   cols: number;
+  // Arrays of percentages (summing to 100)
+  // If undefined, assume equal distribution
+  rowHeights?: number[];
+  colWidths?: number[];
   cells: GridCell[];
   icon?: string;
 }
@@ -50,6 +54,7 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "2col",
     rows: 1,
     cols: 2,
+    colWidths: [50, 50],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 1, occupied: false },
       { id: "c2", row: 0, col: 1, rowSpan: 1, colSpan: 1, occupied: false },
@@ -61,6 +66,7 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "3col",
     rows: 1,
     cols: 3,
+    colWidths: [33.33, 33.33, 33.34],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 1, occupied: false },
       { id: "c2", row: 0, col: 1, rowSpan: 1, colSpan: 1, occupied: false },
@@ -73,6 +79,7 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "2row",
     rows: 2,
     cols: 1,
+    rowHeights: [50, 50],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 1, occupied: false },
       { id: "c2", row: 1, col: 0, rowSpan: 1, colSpan: 1, occupied: false },
@@ -84,6 +91,8 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "2x2",
     rows: 2,
     cols: 2,
+    rowHeights: [50, 50],
+    colWidths: [50, 50],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 1, occupied: false },
       { id: "c2", row: 0, col: 1, rowSpan: 1, colSpan: 1, occupied: false },
@@ -97,6 +106,8 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "3x3",
     rows: 3,
     cols: 3,
+    rowHeights: [33.33, 33.33, 33.34],
+    colWidths: [33.33, 33.33, 33.34],
     cells: Array.from({ length: 9 }, (_, i) => ({
       id: `c${i + 1}`,
       row: Math.floor(i / 3),
@@ -111,7 +122,10 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     name: "Sidebar Left",
     type: "sidebar-left",
     rows: 1,
-    cols: 3,
+    cols: 3, // Using 3 logical columns to allow spanning, but we can also do 2 uneven columns
+    // Let's redefine as 2 columns with explicit widths for better resizing control
+    // Actually, to keep consistency with the 'type', let's stick to the previous cell definition but add default widths
+    colWidths: [33.33, 33.33, 33.34],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 1, occupied: false }, // 33% sidebar
       { id: "c2", row: 0, col: 1, rowSpan: 1, colSpan: 2, occupied: false }, // 67% main
@@ -123,6 +137,7 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "sidebar-right",
     rows: 1,
     cols: 3,
+    colWidths: [33.33, 33.33, 33.34],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 2, occupied: false }, // 67% main
       { id: "c2", row: 0, col: 2, rowSpan: 1, colSpan: 1, occupied: false }, // 33% sidebar
@@ -134,6 +149,8 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "header-2col",
     rows: 2,
     cols: 2,
+    rowHeights: [20, 80],
+    colWidths: [50, 50],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 2, occupied: false }, // Header
       { id: "c2", row: 1, col: 0, rowSpan: 1, colSpan: 1, occupied: false }, // Left col
@@ -146,6 +163,7 @@ export const PRESET_LAYOUTS: GridLayout[] = [
     type: "header-footer",
     rows: 3,
     cols: 1,
+    rowHeights: [15, 70, 15],
     cells: [
       { id: "c1", row: 0, col: 0, rowSpan: 1, colSpan: 1, occupied: false }, // Header
       { id: "c2", row: 1, col: 0, rowSpan: 1, colSpan: 1, occupied: false }, // Main
@@ -154,6 +172,31 @@ export const PRESET_LAYOUTS: GridLayout[] = [
   },
 ];
 
+// Helper: Get accumulated percentage for a given index
+function getAccumulated(
+  values: number[] | undefined,
+  count: number,
+  index: number,
+): number {
+  if (!values || values.length !== count) {
+    return (index / count) * 100;
+  }
+  return values.slice(0, index).reduce((sum, v) => sum + v, 0);
+}
+
+// Helper: Get size percentage for a span
+function getSizePercentage(
+  values: number[] | undefined,
+  count: number,
+  index: number,
+  span: number,
+): number {
+  if (!values || values.length !== count) {
+    return (span / count) * 100;
+  }
+  return values.slice(index, index + span).reduce((sum, v) => sum + v, 0);
+}
+
 // Helper function to get cell boundaries in pixels
 export function getCellBoundaries(
   cell: GridCell,
@@ -161,14 +204,28 @@ export function getCellBoundaries(
   canvasHeight: number,
   layout: GridLayout,
 ): { x: number; y: number; width: number; height: number } {
-  const cellWidth = canvasWidth / layout.cols;
-  const cellHeight = canvasHeight / layout.rows;
+  // Use custom widths/heights if available, otherwise assume equal distribution
+  const startXPct = getAccumulated(layout.colWidths, layout.cols, cell.col);
+  const startYPct = getAccumulated(layout.rowHeights, layout.rows, cell.row);
+
+  const widthPct = getSizePercentage(
+    layout.colWidths,
+    layout.cols,
+    cell.col,
+    cell.colSpan,
+  );
+  const heightPct = getSizePercentage(
+    layout.rowHeights,
+    layout.rows,
+    cell.row,
+    cell.rowSpan,
+  );
 
   return {
-    x: cell.col * cellWidth,
-    y: cell.row * cellHeight,
-    width: cell.colSpan * cellWidth,
-    height: cell.rowSpan * cellHeight,
+    x: (startXPct / 100) * canvasWidth,
+    y: (startYPct / 100) * canvasHeight,
+    width: (widthPct / 100) * canvasWidth,
+    height: (heightPct / 100) * canvasHeight,
   };
 }
 
@@ -180,11 +237,36 @@ export function getCellAtPosition(
   canvasHeight: number,
   layout: GridLayout,
 ): GridCell | null {
-  const cellWidth = canvasWidth / layout.cols;
-  const cellHeight = canvasHeight / layout.rows;
+  // Normalize coordinates to percentages
+  const xPct = (x / canvasWidth) * 100;
+  const yPct = (y / canvasHeight) * 100;
 
-  const col = Math.floor(x / cellWidth);
-  const row = Math.floor(y / cellHeight);
+  // Find column index
+  let col = -1;
+  let currentXPct = 0;
+  for (let c = 0; c < layout.cols; c++) {
+    const w = layout.colWidths ? layout.colWidths[c] : 100 / layout.cols;
+    if (xPct >= currentXPct && xPct < currentXPct + w) {
+      col = c;
+      break;
+    }
+    currentXPct += w;
+  }
+  // Edge case for exactly 100% or slightly out of bounds due to floating point
+  if (col === -1 && xPct >= 99.9) col = layout.cols - 1;
+
+  // Find row index
+  let row = -1;
+  let currentYPct = 0;
+  for (let r = 0; r < layout.rows; r++) {
+    const h = layout.rowHeights ? layout.rowHeights[r] : 100 / layout.rows;
+    if (yPct >= currentYPct && yPct < currentYPct + h) {
+      row = r;
+      break;
+    }
+    currentYPct += h;
+  }
+  if (row === -1 && yPct >= 99.9) row = layout.rows - 1;
 
   return (
     layout.cells.find(

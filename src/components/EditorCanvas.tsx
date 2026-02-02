@@ -1,6 +1,18 @@
 import React from "react";
-import { cn, formatTimeShort } from "@/lib/utils";
-import { Music, Grid3x3 } from "lucide-react";
+import { cn, formatTime, getLayoutDimensions } from "@/lib/utils";
+import {
+  Music,
+  Grid3x3,
+  Minimize,
+  Play,
+  Pause,
+  RotateCw,
+  Crop,
+  Trash2,
+  Maximize2,
+  MoreHorizontal,
+  ImageIcon,
+} from "lucide-react";
 import { useEditorStore } from "@/store/editorStore";
 import { GridOverlay } from "@/components/GridOverlay";
 import { LayoutSelector } from "@/components/LayoutSelector";
@@ -8,6 +20,21 @@ import { GridCell, snapToCell } from "@/lib/gridLayouts";
 import { Element } from "@/types/editor";
 
 const generateElementId = () => `el-${Math.random().toString(36).substr(2, 9)}`;
+
+// Helper to calculate rotation
+const calculateRotation = (
+  startX: number,
+  startY: number,
+  currentX: number,
+  currentY: number,
+  centerX: number,
+  centerY: number,
+) => {
+  const startAngle = Math.atan2(startY - centerY, startX - centerX);
+  const currentAngle = Math.atan2(currentY - centerY, currentX - centerX);
+  const rotation = (currentAngle - startAngle) * (180 / Math.PI);
+  return rotation;
+};
 
 const throttle = <T extends (...args: any[]) => any>(
   func: T,
@@ -38,22 +65,7 @@ const throttle = <T extends (...args: any[]) => any>(
   };
 };
 
-const getLayoutDimensions = (layout: string = "16:9") => {
-  switch (layout) {
-    case "1:1":
-      return { width: 1080, height: 1080 };
-    case "16:9":
-      return { width: 1920, height: 1080 };
-    case "9:16":
-      return { width: 1080, height: 1920 };
-    case "4:5":
-      return { width: 1080, height: 1350 };
-    case "2:3":
-      return { width: 1080, height: 1620 };
-    default:
-      return { width: 1920, height: 1080 };
-  }
-};
+// Local getLayoutDimensions removed
 
 const getAssetUrl = (url?: string) => {
   if (!url) return "";
@@ -103,6 +115,7 @@ const CanvasElement = React.memo(
     updateElement,
     currentPageId,
     isDragging,
+    isObscuring,
   }: {
     element: any;
     isSelected: boolean;
@@ -110,7 +123,7 @@ const CanvasElement = React.memo(
     handleMouseDown: (
       e: React.MouseEvent,
       element: any,
-      type: "move" | "resize",
+      type: "move" | "resize" | "rotate",
       handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se",
     ) => void;
     setEditingElementId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -123,6 +136,7 @@ const CanvasElement = React.memo(
       updates: Record<string, any>,
     ) => void;
     currentPageId: string | undefined;
+    isObscuring?: boolean;
   }) => {
     const getAssetUrl = (url?: string) => {
       if (!url) return "";
@@ -141,6 +155,7 @@ const CanvasElement = React.memo(
         data-element-id={element.id}
         onMouseDown={(e) => handleMouseDown(e, element, "move")}
         onClick={(e) => {
+          e.stopPropagation(); // Prevent deselect
           if (isSelected && element.type === "text") {
             setEditingElementId(element.id);
           }
@@ -155,6 +170,8 @@ const CanvasElement = React.memo(
           isSelected &&
             "ring-[3px] ring-accent z-50 shadow-[0_0_15px_rgba(59,130,246,0.5)]",
           isDragging && "pointer-events-none opacity-50",
+          isObscuring &&
+            "opacity-20 pointer-events-none transition-opacity duration-300", // X-ray effect
         )}
         style={{
           left: `${element.position.x}px`,
@@ -163,9 +180,64 @@ const CanvasElement = React.memo(
           height: element.type === "text" ? "auto" : `${element.size.height}px`,
           minHeight:
             element.type === "text" ? `${element.size.height}px` : undefined,
-          zIndex: isSelected ? 1000 : ((element as any).layer ?? 0),
+          zIndex: (element as any).layer ?? 0,
+          transform: `rotate(${element.rotation || 0}deg)`,
         }}
       >
+        {/* Element Toolbar */}
+        {isSelected && !isDragging && (
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white rounded-lg shadow-xl border border-gray-100 p-1 z-[100] animate-in slide-in-from-bottom-2 fade-in duration-200">
+            <button
+              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
+              title="Replace"
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+            <button
+              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
+              title="Fit to Canvas"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+            <button
+              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors bg-blue-50 text-blue-600"
+              title="Crop"
+            >
+              <Crop className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-gray-200 mx-0.5" />
+            <button
+              className="p-1.5 hover:bg-red-50 text-red-500 rounded-md transition-colors"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                useEditorStore
+                  .getState()
+                  .deleteElement(currentPageId!, element.id);
+              }}
+              title="Delete"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button
+              className="p-1.5 hover:bg-gray-100 rounded-md text-gray-700 transition-colors"
+              title="More"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Rotation Handle */}
+        {isSelected && !isDragging && (
+          <div
+            className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-6 h-6 bg-white rounded-full shadow-lg border border-gray-200 flex items-center justify-center cursor-move hover:scale-110 transition-transform z-[100]"
+            onMouseDown={(e) => handleMouseDown(e, element, "rotate")}
+          >
+            <RotateCw className="w-3 h-3 text-gray-600" />
+          </div>
+        )}
         {element.type === "image" && (
           <div
             className="w-full h-full relative overflow-hidden"
@@ -507,7 +579,9 @@ export function EditorCanvas() {
     setSelectedElement,
     updateElement,
     timelinePosition,
+    setTimelinePosition,
     isPlaying,
+    togglePlay,
     zoom,
     pushHistory,
     undo,
@@ -518,6 +592,8 @@ export function EditorCanvas() {
     setGridMode,
     setPageGridLayout,
     moveElementToPage,
+    isFullscreen,
+    toggleFullscreen,
   } = useEditorStore();
 
   const [editingElementId, setEditingElementId] = React.useState<string | null>(
@@ -531,8 +607,8 @@ export function EditorCanvas() {
     [pages, currentPageId],
   );
   const { width: TOTAL_WIDTH, height: TOTAL_HEIGHT } = React.useMemo(
-    () => getLayoutDimensions(currentPage?.layout || "16:9"),
-    [currentPage?.layout],
+    () => getLayoutDimensions(currentPage || "16:9"),
+    [currentPage?.layout, currentPage?.customSize],
   );
   const allElements = React.useMemo(
     () => currentPage?.elements || [],
@@ -550,6 +626,48 @@ export function EditorCanvas() {
   // All audio elements (render every one so they preload; each only plays when in range)
   const allAudioElements = allElements.filter((el) => el.type === "audio");
 
+  // Strict Layering Sort: Videos/Images (backgrounds) first, then Text/Shapes (overlays)
+  // Secondary Sort: Maintain original array index (time-based or user-defined layer)
+  const sortedElements = React.useMemo(() => {
+    return [...elements].sort((a, b) => {
+      const isMediaA = a.type === "video" || a.type === "image";
+      const isMediaB = b.type === "video" || b.type === "image";
+
+      if (isMediaA && !isMediaB) return -1; // Media goes back
+      if (!isMediaA && isMediaB) return 1; // Overlay goes front
+      return 0; // Maintain existing order within groups
+    });
+  }, [elements]);
+
+  // "X-ray" Logic: Identify elements obscuring the selected element
+  const obscuringIds = React.useMemo(() => {
+    if (!selectedElementId) return new Set<string>();
+
+    const selectedEl = elements.find((el) => el.id === selectedElementId);
+    if (!selectedEl) return new Set<string>();
+
+    const obscured = new Set<string>();
+    const selectedIndex = sortedElements.findIndex(
+      (el) => el.id === selectedElementId,
+    );
+
+    // Only look at elements rendered *after* (on top of) the selected element
+    for (let i = selectedIndex + 1; i < sortedElements.length; i++) {
+      const el = sortedElements[i];
+      // Simple bounding box intersection check
+      const intersects =
+        selectedEl.position.x < el.position.x + el.size.width &&
+        selectedEl.position.x + selectedEl.size.width > el.position.x &&
+        selectedEl.position.y < el.position.y + el.size.height &&
+        selectedEl.position.y + selectedEl.size.height > el.position.y;
+
+      if (intersects) {
+        obscured.add(el.id);
+      }
+    }
+    return obscured;
+  }, [selectedElementId, elements, sortedElements]);
+
   const maxDuration = allElements.reduce((max, el) => {
     return Math.max(max, el.startTime + el.duration);
   }, 0);
@@ -565,7 +683,10 @@ export function EditorCanvas() {
     initialHeight: number;
     initialObjectPosition?: { x: number; y: number };
     initialCrop?: { x: number; y: number; width: number; height: number };
-    type: "move" | "resize";
+    initialRotation?: number;
+    centerX?: number;
+    centerY?: number;
+    type: "move" | "resize" | "rotate";
     handleType?: "nw" | "n" | "ne" | "w" | "e" | "sw" | "s" | "se";
   } | null>(null);
 
@@ -976,7 +1097,7 @@ export function EditorCanvas() {
     ) as HTMLCanvasElement;
     if (!canvas) return;
 
-    const dims = getLayoutDimensions(currentPage?.layout || "16:9");
+    const dims = getLayoutDimensions(currentPage || "16:9");
     if (canvas.width !== dims.width || canvas.height !== dims.height) {
       canvas.width = dims.width;
       canvas.height = dims.height;
@@ -1317,7 +1438,10 @@ export function EditorCanvas() {
 
   return (
     <div
-      className="w-full h-full flex flex-col items-center  justify-center p-8 bg-[#111114] overflow-auto relative"
+      className={cn(
+        "w-full h-full flex flex-col items-center justify-center bg-[#111114] overflow-auto relative",
+        isFullscreen ? "p-0" : "p-8",
+      )}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
@@ -1333,34 +1457,102 @@ export function EditorCanvas() {
       {/* Grid Toggle Button - Top Left */}
       <div className="absolute top-6 left-6 z-10 flex flex-col gap-2">
         <button
-          onClick={() => {
-            if (currentPage?.gridMode) {
-              setGridMode(currentPageId, false);
-            } else {
-              setShowLayoutSelector(true);
-            }
-          }}
+          onClick={() => setShowLayoutSelector(true)}
           className={cn(
-            "w-10 h-10 rounded-lg border-2 transition-all flex items-center justify-center shadow-lg backdrop-blur-md",
-            currentPage?.gridMode
-              ? "bg-[#5956E8] border-[#5956E8] text-white"
-              : "bg-white/80 border-white/20 text-gray-600 hover:border-[#5956E8] hover:text-[#5956E8]",
+            "h-10 rounded-lg border-2 transition-all flex items-center justify-center shadow-lg backdrop-blur-md px-3 gap-2",
+            currentPage?.gridMode && currentPage?.gridLayout?.id !== "single"
+              ? "bg-[#5956E8] border-[#5956E8] text-white min-w-12"
+              : "bg-white/80 border-white/20 text-gray-600 hover:border-[#5956E8] hover:text-[#5956E8] w-10 px-0",
           )}
-          title={currentPage?.gridMode ? "Disable Grid" : "Enable Grid"}
+          title="Change Grid Layout"
         >
-          <Grid3x3 className="w-5 h-5" />
+          {currentPage?.gridMode &&
+          currentPage?.gridLayout &&
+          currentPage.gridLayout.id !== "single" ? (
+            <span className="text-[10px] font-bold uppercase whitespace-nowrap">
+              {currentPage.gridLayout.type === "2col"
+                ? "2 COL"
+                : currentPage.gridLayout.type === "3col"
+                  ? "3 COL"
+                  : currentPage.gridLayout.type === "2row"
+                    ? "2 ROW"
+                    : currentPage.gridLayout.type === "sidebar-left"
+                      ? "SIDE L"
+                      : currentPage.gridLayout.type === "sidebar-right"
+                        ? "SIDE R"
+                        : currentPage.gridLayout.type === "header-2col"
+                          ? "HEAD 2"
+                          : currentPage.gridLayout.type === "header-footer"
+                            ? "H + F"
+                            : currentPage.gridLayout.name.replace("Grid ", "")}
+            </span>
+          ) : (
+            <Grid3x3 className="w-5 h-5" />
+          )}
         </button>
-
-        {currentPage?.gridMode && (
-          <button
-            onClick={() => setShowLayoutSelector(true)}
-            className="w-10 h-10 rounded-lg border-2 bg-white/80 border-white/20 text-gray-600 hover:border-[#5956E8] hover:text-[#5956E8] transition-all flex items-center justify-center shadow-lg backdrop-blur-md"
-            title="Change Layout"
-          >
-            <span className="text-[10px] font-bold">GRID</span>
-          </button>
-        )}
       </div>
+
+      {/* Full Screen Player Controls */}
+      {isFullscreen && (
+        <div className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/90 via-black/60 to-transparent z-[60] flex flex-col justify-end px-8 pb-8 animate-in slide-in-from-bottom-5 duration-300 pointer-events-auto group">
+          {/* Progress Bar */}
+          <div
+            className="w-full h-1 bg-white/20 rounded-full mb-4 cursor-pointer relative group/progress hover:h-1.5 transition-all"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const percent = (e.clientX - rect.left) / rect.width;
+              setTimelinePosition(percent * (currentPage?.duration || 10));
+            }}
+          >
+            {/* Progress Fill */}
+            <div
+              className="absolute top-0 left-0 h-full bg-accent rounded-full transition-all duration-75 ease-linear"
+              style={{
+                width: `${(timelinePosition / (currentPage?.duration || 10)) * 100}%`,
+              }}
+            />
+            {/* Scrubber Knob (visible on hover) */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover/progress:opacity-100 transition-opacity"
+              style={{
+                left: `${(timelinePosition / (currentPage?.duration || 10)) * 100}%`,
+                transform: `translate(-50%, -50%)`,
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={togglePlay}
+                className="w-10 h-10 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 active:scale-95 transition-all"
+              >
+                {isPlaying ? (
+                  <Pause className="w-4 h-4 fill-current" />
+                ) : (
+                  <Play className="w-4 h-4 fill-current ml-0.5" />
+                )}
+              </button>
+
+              <div className="flex items-center gap-2 font-mono text-sm font-bold text-white select-none">
+                <span>{formatTime(timelinePosition)}</span>
+                <span className="text-white/50">/</span>
+                <span className="text-white/50">
+                  {formatTime(currentPage?.duration || 10)}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 hover:bg-white/10 text-white rounded-lg transition-colors"
+              title="Exit Full Screen"
+            >
+              <Minimize className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Layout Selector Modal */}
       <LayoutSelector
@@ -1368,7 +1560,8 @@ export function EditorCanvas() {
         onClose={() => setShowLayoutSelector(false)}
         onSelectLayout={(layout) => {
           setPageGridLayout(currentPageId, layout);
-          setGridMode(currentPageId, true);
+          // If "Single" is selected, effectively turn off grid mode (no overlay)
+          setGridMode(currentPageId, layout.id !== "single");
         }}
         currentLayout={currentPage?.gridLayout || null}
       />
@@ -1401,6 +1594,9 @@ export function EditorCanvas() {
             canvasHeight={TOTAL_HEIGHT}
             hoveredCell={hoveredCell}
             onCellHover={setHoveredCell}
+            onLayoutChange={(newLayout) => {
+              if (currentPageId) setPageGridLayout(currentPageId, newLayout);
+            }}
           />
         )}
 
@@ -1439,7 +1635,7 @@ export function EditorCanvas() {
           </div>
         ) : (
           <div className="w-full h-full relative">
-            {elements.map((element) => (
+            {sortedElements.map((element) => (
               <CanvasElement
                 key={element.id}
                 element={element}
@@ -1452,6 +1648,7 @@ export function EditorCanvas() {
                 isPlaying={isPlaying}
                 updateElement={updateElement}
                 currentPageId={currentPageId}
+                isObscuring={obscuringIds.has(element.id)}
               />
             ))}
           </div>

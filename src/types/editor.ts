@@ -1,4 +1,4 @@
-export type LayoutType = "1:1" | "16:9" | "9:16" | "4:5" | "2:3";
+export type LayoutType = "1:1" | "16:9" | "9:16" | "4:5" | "2:3" | "custom";
 
 export type ElementType =
   | "image"
@@ -56,6 +56,7 @@ export interface BaseElement {
   objectPosition?: { x: number; y: number };
   crop?: { x: number; y: number; width: number; height: number };
   trim?: { start: number; end: number };
+  rotation?: number; // Rotation in degrees
 }
 
 export interface ImageElement extends BaseElement {
@@ -156,6 +157,7 @@ export interface Page {
   duration: number;
   backgroundColor: string;
   layout: LayoutType;
+  customSize?: Size; // Width and height for custom layouts
   elements: Element[];
   animation?: {
     fadeIn?: { duration: number };

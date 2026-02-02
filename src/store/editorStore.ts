@@ -15,6 +15,10 @@ interface EditorState extends EditorStore {
   copyElement: (elementId: string) => void;
   pasteElement: () => void;
   reorderPages: (startIndex: number, endIndex: number) => void;
+  isTimelineCollapsed: boolean;
+  toggleTimelineCollapsed: () => void;
+  isFullscreen: boolean;
+  toggleFullscreen: () => void;
 }
 
 // Sample resources and pages are now empty by default as requested.
@@ -55,7 +59,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saveStatus: "idle",
   history: [],
   future: [],
+  history: [],
+  future: [],
   clipboard: null,
+  isTimelineCollapsed: false,
+  isFullscreen: false,
+
+  toggleTimelineCollapsed: () =>
+    set((state) => ({ isTimelineCollapsed: !state.isTimelineCollapsed })),
+  toggleFullscreen: () =>
+    set((state) => ({ isFullscreen: !state.isFullscreen })), // Toggle fullscreen state
 
   // Project actions
   pushHistory: () => {
