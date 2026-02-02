@@ -30,14 +30,6 @@ export default function Home() {
   // Enable Auto-Save
   useAutoSave(2000);
 
-  if (viewMode === "home") {
-    return <ProjectList />;
-  }
-
-  if (viewMode === "empty") {
-    return <EmptyState />;
-  }
-
   return (
     <main
       className={cn(
@@ -45,54 +37,62 @@ export default function Home() {
         isDarkMode ? "dark" : "light",
       )}
     >
-      {!isFullscreen && <TopNav />}
+      {viewMode === "home" ? (
+        <ProjectList />
+      ) : viewMode === "empty" ? (
+        <EmptyState />
+      ) : (
+        <>
+          {!isFullscreen && <TopNav />}
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        {!isFullscreen && showLeftSidebar && (
-          <div className="shrink-0 z-20 h-full">
-            <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+          <div className="flex flex-1 overflow-hidden">
+            {/* Sidebar */}
+            {!isFullscreen && showLeftSidebar && (
+              <div className="shrink-0 z-20 h-full">
+                <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+              </div>
+            )}
+
+            {/* Asset Library */}
+            {!isFullscreen && showLeftSidebar && (
+              <div className="shrink-0 hidden lg:block z-10 h-full border-r border-border">
+                <AssetLibrary activeTab={activeTab} />
+              </div>
+            )}
+
+            {/* Canvas Area */}
+            <div className="flex-1 bg-bg-app/50 relative flex items-center justify-center overflow-hidden">
+              <EditorCanvas />
+            </div>
+
+            {/* Properties Panel */}
+            {!isFullscreen && showRightSidebar && (
+              <div className="shrink-0 hidden xl:block h-full">
+                <PropertiesPanel />
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Asset Library */}
-        {!isFullscreen && showLeftSidebar && (
-          <div className="shrink-0 hidden lg:block z-10 h-full border-r border-border">
-            <AssetLibrary activeTab={activeTab} />
-          </div>
-        )}
-
-        {/* Canvas Area */}
-        <div className="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
-          <EditorCanvas />
-        </div>
-
-        {/* Properties Panel */}
-        {!isFullscreen && showRightSidebar && (
-          <div className="shrink-0 hidden xl:block h-full">
-            <PropertiesPanel />
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Timeline */}
-      {!isFullscreen && (
-        <div
-          className={cn(
-            "shrink-0 z-40 transition-[height] duration-300",
-            isTimelineResizing && "transition-none",
+          {/* Bottom Timeline */}
+          {!isFullscreen && (
+            <div
+              className={cn(
+                "shrink-0 z-40 transition-[height] duration-300",
+                isTimelineResizing && "transition-none",
+              )}
+              style={{
+                height:
+                  timelineHeightMode === "small"
+                    ? 56
+                    : timelineHeightMode === "big"
+                      ? 450
+                      : timelineHeight,
+              }}
+            >
+              <Timeline />
+            </div>
           )}
-          style={{
-            height:
-              timelineHeightMode === "small"
-                ? 56
-                : timelineHeightMode === "big"
-                  ? 450
-                  : timelineHeight,
-          }}
-        >
-          <Timeline />
-        </div>
+        </>
       )}
     </main>
   );
